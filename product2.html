@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Product 2 Details</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <header>
+        <h1>Dummy Shopping Website</h1>
+        <nav>
+            <ul>
+                <li><a href="index.html">Home</a></li>
+                <li><a href="#">Category 1</a></li>
+                <li><a href="#">Category 2</a></li>
+            </ul>
+        </nav>
+    </header>
+
+    <main>
+        <section class="breadcrumb">
+            <p>Home > Category 1 > Product 2</p>
+        </section>
+
+        <section class="product-details">
+            <img src="images/product2.jpg" alt="Product 2">
+            <h2>Product 2</h2>
+            <p class="description">This is a detailed description of Product 2.</p>
+            <p class="price">$29.99</p>
+            <button class="add-to-cart">Add to Cart</button>
+        </section>
+
+        <!-- Shopping List -->
+        <section class="shopping-list">
+            <h2>Shopping List</h2>
+            <div class="cart-items">
+                <div class="cart-item">
+                    <input type="number" value="1" min="1">
+                    <span>Product 1 - $19.99</span>
+                </div>
+                <div class="cart-item">
+                    <input type="number" value="1" min="1">
+                    <span>Product 2 - $29.99</span>
+                </div>
+                <div class="cart-item">
+                    <input type="number" value="1" min="1">
+                    <span>Product 3 - $39.99</span>
+                </div>
+            </div>
+            <button class="checkout">Checkout</button>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2024 Dummy Shopping Website</p>
+    </footer>
+
+    <script>
+        // Add to Cart functionality
+        document.querySelector('.add-to-cart').addEventListener('click', () => {
+            alert('Product added to cart!');
+            // You can add logic here to update the shopping list dynamically
+        });
+    </script>
+</body>
+</html>
