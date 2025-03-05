@@ -23,6 +23,16 @@
             <p>Home</p>
         </section>
 
+        <!-- 类别选择下拉菜单 -->
+        <section class="category-select">
+            <label for="category-select">Select Category:</label>
+            <select id="category-select">
+                <option value="">-- Select a Category --</option>
+                <!-- 动态加载类别 -->
+            </select>
+        </section>
+
+        <!-- 产品列表 -->
         <section class="product-list" id="product-list">
             <div class="product">
                 <a href="product1.html">
@@ -50,7 +60,7 @@
             </div>
         </section>
 
-        <!-- Shopping List -->
+        <!-- 购物车 -->
         <section class="shopping-list">
             <h2>Shopping List</h2>
             <div class="cart-items">
@@ -76,27 +86,50 @@
     </footer>
 
     <script>
-        // Load products dynamically
-        fetch('/products/1') // Load products for category 1
+        // 动态加载类别
+        fetch('/categories')
             .then(response => response.json())
-            .then(products => {
-                const productList = document.getElementById('product-list');
-                products.forEach(product => {
-                    const productDiv = document.createElement('div');
-                    productDiv.className = 'product';
-                    productDiv.innerHTML = `
-                        <a href="product${product.pid}.html">
-                            <img src="images/product${product.pid}.jpg" alt="${product.name}">
-                            <h3>${product.name}</h3>
-                            <p>$${product.price}</p>
-                        </a>
-                        <button class="add-to-cart" data-pid="${product.pid}" data-name="${product.name}" data-price="${product.price}">Add to Cart</button>
-                    `;
-                    productList.appendChild(productDiv);
+            .then(categories => {
+                const categorySelect = document.getElementById('category-select');
+                categories.forEach(category => {
+                    const option = document.createElement('option');
+                    option.value = category.catid;
+                    option.textContent = category.name;
+                    categorySelect.appendChild(option);
                 });
             });
 
-        // Add to Cart functionality
+        // 根据选择的类别加载产品
+        document.getElementById('category-select').addEventListener('change', (e) => {
+            const catid = e.target.value;
+            if (catid) {
+                fetch(`/products/${catid}`)
+                    .then(response => response.json())
+                    .then(products => {
+                        const productList = document.getElementById('product-list');
+                        productList.innerHTML = ''; // 清空当前产品列表
+                        products.forEach(product => {
+                            const productDiv = document.createElement('div');
+                            productDiv.className = 'product';
+                            productDiv.innerHTML = `
+                                <a href="product${product.pid}.html">
+                                    <img src="images/product${product.pid}.jpg" alt="${product.name}">
+                                    <h3>${product.name}</h3>
+                                    <p>$${product.price}</p>
+                                </a>
+                                <button class="add-to-cart" data-pid="${product.pid}" data-name="${product.name}" data-price="${product.price}">Add to Cart</button>
+                            `;
+                            productList.appendChild(productDiv);
+                        });
+                    });
+            } else {
+                // 如果没有选择类别，清空产品列表
+                const productList = document.getElementById('product-list');
+                productList.innerHTML = '';
+            }
+        });
+
+        // 添加购物车功能
         document.addEventListener('click', (event) => {
             if (event.target.classList.contains('add-to-cart')) {
                 const productId = event.target.getAttribute('data-pid');
@@ -117,7 +150,7 @@
             }
         });
 
-        // Update Cart UI
+        // 更新购物车 UI
         function updateCartUI() {
             const cart = JSON.parse(localStorage.getItem('cart')) || [];
             const cartItems = document.querySelector('.cart-items');
@@ -141,7 +174,7 @@
             cartItems.appendChild(totalElement);
         }
 
-        // Load cart on page load
+        // 页面加载时恢复购物车
         window.addEventListener('load', () => {
             updateCartUI();
         });
