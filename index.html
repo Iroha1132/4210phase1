@@ -99,7 +99,7 @@
 
     <script>
         // 动态加载类别
-        fetch('/categories')
+        fetch('http://104.214.187.206:3000/categories')
             .then(response => response.json())
             .then(categories => {
                 const categorySelect = document.getElementById('category-select');
@@ -115,7 +115,7 @@
         document.getElementById('category-select').addEventListener('change', (e) => {
             const catid = e.target.value;
             if (catid) {
-                fetch(`/products/${catid}`)
+                fetch(`http://104.214.187.206:3000/products/${catid}`)
                     .then(response => response.json())
                     .then(products => {
                         const productList = document.getElementById('product-list');
