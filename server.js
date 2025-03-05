@@ -4,6 +4,7 @@ const mysql = require('mysql');
 const app = express();
 const path = require('path');
 const multer = require('multer');
+const sharp = require('sharp');
 
 const upload = multer({ dest: 'uploads/' });
 
@@ -59,12 +60,30 @@ app.get('/product/:pid', (req, res) => {
 // Add a product
 app.post('/add-product', upload.single('image'), (req, res) => {
     const { catid, name, price, description } = req.body;
-    const imagePath = req.file ? req.file.path : null; // 获取上传的图片路径
-    const sql = 'INSERT INTO products (catid, name, price, description, image) VALUES (?, ?, ?, ?, ?)';
-    db.query(sql, [catid, name, price, description, imagePath], (err, result) => {
-        if (err) throw err;
-        res.send('Product added');
-    });
+    const imagePath = req.file ? req.file.path : null;
+
+    if (imagePath) {
+        // 生成缩略图
+        sharp(imagePath)
+            .resize(200, 200) // 缩放到 200x200
+            .toFile(`uploads/thumbnail-${req.file.filename}`, (err) => {
+                if (err) throw err;
+                // 将缩略图路径存储在数据库中
+                const thumbnailPath = `uploads/thumbnail-${req.file.filename}`;
+                const sql = 'INSERT INTO products (catid, name, price, description, image, thumbnail) VALUES (?, ?, ?, ?, ?, ?)';
+                db.query(sql, [catid, name, price, description, imagePath, thumbnailPath], (err, result) => {
+                    if (err) throw err;
+                    res.send('Product added');
+                });
+            });
+    } else {
+        // 如果没有上传图片，直接插入产品
+        const sql = 'INSERT INTO products (catid, name, price, description) VALUES (?, ?, ?, ?)';
+        db.query(sql, [catid, name, price, description], (err, result) => {
+            if (err) throw err;
+            res.send('Product added');
+        });
+    }
 });
 
 // Add a category
