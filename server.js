@@ -43,6 +43,10 @@ app.get('/categories', (req, res) => {
 });
 
 // Get products by category
+app.get('/admin', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+
 app.get('/products/:catid', (req, res) => {
     const catid = req.params.catid;
     const sql = 'SELECT * FROM products WHERE catid = ?';
