@@ -23,15 +23,30 @@
             <p>Home > Category 1 > Product 1</p>
         </section>
 
-        <section class="product-details" id="product-details">
-            <!-- Product details will be dynamically loaded here -->
+        <section class="product-details">
+            <img src="images/product1.jpg" alt="Product 1">
+            <h2>Product 1</h2>
+            <p class="description">This is a detailed description of Product 1.</p>
+            <p class="price">$19.99</p>
+            <button class="add-to-cart">Add to Cart</button>
         </section>
 
         <!-- Shopping List -->
         <section class="shopping-list">
             <h2>Shopping List</h2>
             <div class="cart-items">
-                <!-- Cart items will be dynamically loaded here -->
+                <div class="cart-item">
+                    <input type="number" value="1" min="1">
+                    <span>Product 1 - $19.99</span>
+                </div>
+                <div class="cart-item">
+                    <input type="number" value="1" min="1">
+                    <span>Product 2 - $29.99</span>
+                </div>
+                <div class="cart-item">
+                    <input type="number" value="1" min="1">
+                    <span>Product 3 - $39.99</span>
+                </div>
             </div>
             <button class="checkout">Checkout</button>
         </section>
