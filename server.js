@@ -3,6 +3,9 @@ const bodyParser = require('body-parser');
 const mysql = require('mysql');
 const app = express();
 const path = require('path');
+const multer = require('multer');
+
+const upload = multer({ dest: 'uploads/' });
 
 // Database connection
 const db = mysql.createConnection({
@@ -54,10 +57,11 @@ app.get('/product/:pid', (req, res) => {
 });
 
 // Add a product
-app.post('/add-product', (req, res) => {
+app.post('/add-product', upload.single('image'), (req, res) => {
     const { catid, name, price, description } = req.body;
-    const sql = 'INSERT INTO products (catid, name, price, description) VALUES (?, ?, ?, ?)';
-    db.query(sql, [catid, name, price, description], (err, result) => {
+    const imagePath = req.file ? req.file.path : null; // 获取上传的图片路径
+    const sql = 'INSERT INTO products (catid, name, price, description, image) VALUES (?, ?, ?, ?, ?)';
+    db.query(sql, [catid, name, price, description, imagePath], (err, result) => {
         if (err) throw err;
         res.send('Product added');
     });
@@ -75,5 +79,5 @@ app.post('/add-category', (req, res) => {
 
 // Start the server
 app.listen(3000, () => {
-    console.log('Server started on port');
+    console.log('Server started on port 3000');
 });
