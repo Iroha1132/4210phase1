@@ -78,7 +78,7 @@
     <script>
       // Load product details dynamically
       const productId = 2; // Change this for product2.html and product3.html
-      fetch(`/product/${productId}`)
+      fetch(`http://104.214.187.206:3000/product/${productId}`)
         .then((response) => response.json())
         .then((product) => {
           const productDetails = document.getElementById("product-details");
@@ -92,7 +92,7 @@
         });
 
       // 动态加载类别
-      fetch("/categories")
+      fetch("http://104.214.187.206:3000/categories")
         .then((response) => response.json())
         .then((categories) => {
           const categorySelect = document.getElementById("category-select");
@@ -110,7 +110,7 @@
         .addEventListener("change", (e) => {
           const catid = e.target.value;
           if (catid) {
-            fetch(`/products/${catid}`)
+            fetch(`http://104.214.187.206:3000/products/${catid}`)
               .then((response) => response.json())
               .then((products) => {
                 const productList = document.getElementById("product-list");
