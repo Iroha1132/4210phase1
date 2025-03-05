@@ -57,10 +57,69 @@
     </footer>
 
     <script>
-        // Add to Cart functionality
-        document.querySelector('.add-to-cart').addEventListener('click', () => {
-            alert('Product added to cart!');
-            // You can add logic here to update the shopping list dynamically
+        // Load product details dynamically
+        const productId = 1; // Change this for product2.html and product3.html
+        fetch(`/product/${productId}`)
+            .then(response => response.json())
+            .then(product => {
+                const productDetails = document.getElementById('product-details');
+                productDetails.innerHTML = `
+                    <img src="images/product${product.pid}.jpg" alt="${product.name}">
+                    <h2>${product.name}</h2>
+                    <p class="description">${product.description}</p>
+                    <p class="price">$${product.price}</p>
+                    <button class="add-to-cart" data-pid="${product.pid}" data-name="${product.name}" data-price="${product.price}">Add to Cart</button>
+                `;
+            });
+
+        // Add to Cart functionality (same as in index.html)
+        document.addEventListener('click', (event) => {
+            if (event.target.classList.contains('add-to-cart')) {
+                const productId = event.target.getAttribute('data-pid');
+                const productName = event.target.getAttribute('data-name');
+                const productPrice = event.target.getAttribute('data-price');
+
+                let cart = JSON.parse(localStorage.getItem('cart')) || [];
+                const existingProduct = cart.find(item => item.pid === productId);
+
+                if (existingProduct) {
+                    existingProduct.quantity += 1;
+                } else {
+                    cart.push({ pid: productId, name: productName, price: productPrice, quantity: 1 });
+                }
+
+                localStorage.setItem('cart', JSON.stringify(cart));
+                updateCartUI();
+            }
+        });
+
+        // Update Cart UI (same as in index.html)
+        function updateCartUI() {
+            const cart = JSON.parse(localStorage.getItem('cart')) || [];
+            const cartItems = document.querySelector('.cart-items');
+            cartItems.innerHTML = '';
+
+            let totalAmount = 0;
+            cart.forEach(item => {
+                totalAmount += item.price * item.quantity;
+                const cartItem = document.createElement('div');
+                cartItem.className = 'cart-item';
+                cartItem.innerHTML = `
+                    <input type="number" value="${item.quantity}" min="1">
+                    <span>${item.name} - $${item.price}</span>
+                `;
+                cartItems.appendChild(cartItem);
+            });
+
+            const totalElement = document.createElement('div');
+            totalElement.className = 'total';
+            totalElement.innerHTML = `Total: $${totalAmount.toFixed(2)}`;
+            cartItems.appendChild(totalElement);
+        }
+
+        // Load cart on page load
+        window.addEventListener('load', () => {
+            updateCartUI();
         });
     </script>
 </body>
