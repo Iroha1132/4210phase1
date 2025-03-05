@@ -1,10 +1,39 @@
-<!-- admin.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Panel</title>
+    <style>
+        .error {
+            color: red;
+            font-size: 0.9em;
+        }
+        ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        li {
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        button {
+            background-color: #ff4d4d;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #cc0000;
+        }
+    </style>
 </head>
 <body>
     <h1>Admin Panel</h1>
@@ -13,17 +42,19 @@
     <form id="product-form">
         <h2>Manage Products</h2>
         <label for="category">Category:</label>
-        <select id="category" name="category">
+        <select id="category" name="category" required>
+            <option value="">-- Select a Category --</option>
             <!-- 动态加载类别 -->
         </select><br>
         <label for="name">Product Name:</label>
         <input type="text" id="name" name="name" required><br>
         <label for="price">Price:</label>
-        <input type="number" id="price" name="price" step="0.01" required><br>
+        <input type="number" id="price" name="price" step="0.01" min="0" required><br>
         <label for="description">Description:</label>
         <textarea id="description" name="description" required></textarea><br>
         <label for="image">Product Image:</label>
-        <input type="file" id="image" name="image" accept="image/jpeg, image/png, image/gif"><br>
+        <input type="file" id="image" name="image" accept="image/jpeg, image/png, image/gif" required><br>
+        <div id="image-error" class="error"></div>
         <button type="submit">Add Product</button>
     </form>
 
@@ -35,30 +66,91 @@
         <button type="submit">Add Category</button>
     </form>
 
+    <!-- 产品列表 -->
+    <h2>Product List</h2>
+    <ul id="product-list"></ul>
+
+    <!-- 类别列表 -->
+    <h2>Category List</h2>
+    <ul id="category-list"></ul>
+
     <script>
         // 动态加载类别
-        fetch('/categories')
-            .then(response => response.json())
-            .then(categories => {
-                const categorySelect = document.getElementById('category');
-                categories.forEach(category => {
-                    const option = document.createElement('option');
-                    option.value = category.catid;
-                    option.textContent = category.name;
-                    categorySelect.appendChild(option);
+        function loadCategories() {
+            fetch('/categories')
+                .then(response => response.json())
+                .then(categories => {
+                    const categorySelect = document.getElementById('category');
+                    categorySelect.innerHTML = '<option value="">-- Select a Category --</option>';
+                    categories.forEach(category => {
+                        const option = document.createElement('option');
+                        option.value = category.catid;
+                        option.textContent = category.name;
+                        categorySelect.appendChild(option);
+                    });
                 });
-            });
+        }
+
+        // 动态加载产品
+        function loadProducts() {
+            fetch('/products')
+                .then(response => response.json())
+                .then(products => {
+                    const productList = document.getElementById('product-list');
+                    productList.innerHTML = '';
+                    products.forEach(product => {
+                        const li = document.createElement('li');
+                        li.innerHTML = `
+                            ${product.name} - $${product.price}
+                            <button onclick="deleteProduct(${product.pid})">Delete</button>
+                        `;
+                        productList.appendChild(li);
+                    });
+                });
+        }
+
+        // 动态加载类别列表
+        function loadCategoryList() {
+            fetch('/categories')
+                .then(response => response.json())
+                .then(categories => {
+                    const categoryList = document.getElementById('category-list');
+                    categoryList.innerHTML = '';
+                    categories.forEach(category => {
+                        const li = document.createElement('li');
+                        li.innerHTML = `
+                            ${category.name}
+                            <button onclick="deleteCategory(${category.catid})">Delete</button>
+                        `;
+                        categoryList.appendChild(li);
+                    });
+                });
+        }
 
         // 提交产品表单
         document.getElementById('product-form').addEventListener('submit', (e) => {
             e.preventDefault();
             const formData = new FormData(e.target);
+
+            // 图片大小验证（≤10MB）
+            const imageFile = document.getElementById('image').files[0];
+            if (imageFile && imageFile.size > 10 * 1024 * 1024) {
+                document.getElementById('image-error').textContent = 'Image size must be less than 10MB.';
+                return;
+            } else {
+                document.getElementById('image-error').textContent = '';
+            }
+
             fetch('/add-product', {
                 method: 'POST',
                 body: formData
             })
             .then(response => response.text())
-            .then(message => alert(message));
+            .then(message => {
+                alert(message);
+                loadProducts(); // 重新加载产品列表
+            })
+            .catch(error => console.error('Error:', error));
         });
 
         // 提交类别表单
@@ -71,7 +163,46 @@
                 body: JSON.stringify({ name: categoryName })
             })
             .then(response => response.text())
-            .then(message => alert(message));
+            .then(message => {
+                alert(message);
+                loadCategories(); // 重新加载类别
+                loadCategoryList(); // 重新加载类别列表
+            })
+            .catch(error => console.error('Error:', error));
+        });
+
+        // 删除产品
+        function deleteProduct(pid) {
+            if (confirm('Are you sure you want to delete this product?')) {
+                fetch(`/delete-product/${pid}`, { method: 'DELETE' })
+                    .then(response => response.text())
+                    .then(message => {
+                        alert(message);
+                        loadProducts(); // 重新加载产品列表
+                    })
+                    .catch(error => console.error('Error:', error));
+            }
+        }
+
+        // 删除类别
+        function deleteCategory(catid) {
+            if (confirm('Are you sure you want to delete this category?')) {
+                fetch(`/delete-category/${catid}`, { method: 'DELETE' })
+                    .then(response => response.text())
+                    .then(message => {
+                        alert(message);
+                        loadCategories(); // 重新加载类别
+                        loadCategoryList(); // 重新加载类别列表
+                    })
+                    .catch(error => console.error('Error:', error));
+            }
+        }
+
+        // 页面加载时初始化
+        window.addEventListener('load', () => {
+            loadCategories();
+            loadProducts();
+            loadCategoryList();
         });
     </script>
 </body>
