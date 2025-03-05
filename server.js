@@ -6,7 +6,7 @@ const path = require('path');
 
 // Database connection
 const db = mysql.createConnection({
-    host: '104.214.187.206', // Replace with your Azure VM's public IP
+    host: 'localhost', // Replace with your Azure VM's public IP
     user: 'root', // Replace with the MySQL user you created
     password: 'zhang1325020', // Replace with the user's password
     database: 'dummy_shop'
