@@ -8,6 +8,11 @@ const sharp = require('sharp');
 
 const upload = multer({ dest: 'uploads/' });
 
+const cors = require('cors');
+
+// 启用 CORS
+app.use(cors());
+
 // Database connection
 const db = mysql.createConnection({
     host: 'localhost', // Replace with your Azure VM's public IP
