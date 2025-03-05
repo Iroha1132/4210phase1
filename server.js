@@ -5,19 +5,18 @@ const app = express();
 const path = require('path');
 const multer = require('multer');
 const sharp = require('sharp');
+const cors = require('cors');
 
 const upload = multer({ dest: 'uploads/' });
-
-const cors = require('cors');
 
 // 启用 CORS
 app.use(cors());
 
 // Database connection
 const db = mysql.createConnection({
-    host: 'localhost', // Replace with your Azure VM's public IP
-    user: 'root', // Replace with the MySQL user you created
-    password: 'zhang1325020', // Replace with the user's password
+    host: 'localhost',
+    user: 'root',
+    password: 'zhang1325020',
     database: 'dummy_shop'
 });
 
@@ -29,11 +28,11 @@ db.connect((err) => {
 // Middleware
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
-app.use(express.static(path.join(__dirname, 'public'))); // Serve static files
+app.use(express.static(path.join(__dirname, 'public')));
 
 // API Endpoints
 
-// Get all categories
+// 获取所有类别
 app.get('/categories', (req, res) => {
     const sql = 'SELECT * FROM categories';
     db.query(sql, (err, results) => {
@@ -42,7 +41,16 @@ app.get('/categories', (req, res) => {
     });
 });
 
-// Get products by category
+// 获取所有产品
+app.get('/products', (req, res) => {
+    const sql = 'SELECT * FROM products';
+    db.query(sql, (err, results) => {
+        if (err) throw err;
+        res.json(results);
+    });
+});
+
+// 根据类别获取产品
 app.get('/products/:catid', (req, res) => {
     const catid = req.params.catid;
     const sql = 'SELECT * FROM products WHERE catid = ?';
@@ -52,7 +60,7 @@ app.get('/products/:catid', (req, res) => {
     });
 });
 
-// Get product details by ID
+// 获取产品详情
 app.get('/product/:pid', (req, res) => {
     const pid = req.params.pid;
     const sql = 'SELECT * FROM products WHERE pid = ?';
@@ -62,18 +70,16 @@ app.get('/product/:pid', (req, res) => {
     });
 });
 
-// Add a product
+// 添加产品
 app.post('/add-product', upload.single('image'), (req, res) => {
     const { catid, name, price, description } = req.body;
     const imagePath = req.file ? req.file.path : null;
 
     if (imagePath) {
-        // 生成缩略图
         sharp(imagePath)
-            .resize(200, 200) // 缩放到 200x200
+            .resize(200, 200)
             .toFile(`uploads/thumbnail-${req.file.filename}`, (err) => {
                 if (err) throw err;
-                // 将缩略图路径存储在数据库中
                 const thumbnailPath = `uploads/thumbnail-${req.file.filename}`;
                 const sql = 'INSERT INTO products (catid, name, price, description, image, thumbnail) VALUES (?, ?, ?, ?, ?, ?)';
                 db.query(sql, [catid, name, price, description, imagePath, thumbnailPath], (err, result) => {
@@ -82,7 +88,6 @@ app.post('/add-product', upload.single('image'), (req, res) => {
                 });
             });
     } else {
-        // 如果没有上传图片，直接插入产品
         const sql = 'INSERT INTO products (catid, name, price, description) VALUES (?, ?, ?, ?)';
         db.query(sql, [catid, name, price, description], (err, result) => {
             if (err) throw err;
@@ -91,7 +96,7 @@ app.post('/add-product', upload.single('image'), (req, res) => {
     }
 });
 
-// Add a category
+// 添加类别
 app.post('/add-category', (req, res) => {
     const { name } = req.body;
     const sql = 'INSERT INTO categories (name) VALUES (?)';
@@ -101,7 +106,27 @@ app.post('/add-category', (req, res) => {
     });
 });
 
-// Start the server
+// 删除产品
+app.delete('/delete-product/:pid', (req, res) => {
+    const pid = req.params.pid;
+    const sql = 'DELETE FROM products WHERE pid = ?';
+    db.query(sql, [pid], (err, result) => {
+        if (err) throw err;
+        res.send('Product deleted');
+    });
+});
+
+// 删除类别
+app.delete('/delete-category/:catid', (req, res) => {
+    const catid = req.params.catid;
+    const sql = 'DELETE FROM categories WHERE catid = ?';
+    db.query(sql, [catid], (err, result) => {
+        if (err) throw err;
+        res.send('Category deleted');
+    });
+});
+
+// 启动服务器
 app.listen(3000, () => {
     console.log('Server started on port 3000');
 });
