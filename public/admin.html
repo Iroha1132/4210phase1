@@ -148,6 +148,13 @@
             const formData = new FormData(e.target);
             const productId = document.getElementById('product-id').value;
 
+            // 确保类别信息被正确传递
+            const catid = document.getElementById('category').value;
+            if (!catid) {
+                alert('Please select a category.');
+                return;
+            }
+
             // 图片大小验证（≤10MB）
             const imageFile = document.getElementById('image').files[0];
             if (imageFile && imageFile.size > 10 * 1024 * 1024) {
@@ -207,7 +214,7 @@
                 .then(response => response.json())
                 .then(product => {
                     document.getElementById('product-id').value = product.pid;
-                    document.getElementById('category').value = product.catid;
+                    document.getElementById('category').value = product.catid; // 确保类别ID被正确设置
                     document.getElementById('name').value = product.name;
                     document.getElementById('price').value = product.price;
                     document.getElementById('description').value = product.description;
