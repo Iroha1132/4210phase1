@@ -33,6 +33,13 @@
         button:hover {
             background-color: #cc0000;
         }
+        .edit-btn {
+            background-color: #4CAF50;
+            margin-right: 5px;
+        }
+        .edit-btn:hover {
+            background-color: #45a049;
+        }
     </style>
 </head>
 <body>
@@ -41,6 +48,7 @@
     <!-- 管理产品的表单 -->
     <form id="product-form">
         <h2>Manage Products</h2>
+        <input type="hidden" id="product-id" name="product-id">
         <label for="category">Category:</label>
         <select id="category" name="category" required>
             <option value="">-- Select a Category --</option>
@@ -53,17 +61,18 @@
         <label for="description">Description:</label>
         <textarea id="description" name="description" required></textarea><br>
         <label for="image">Product Image:</label>
-        <input type="file" id="image" name="image" accept="image/jpeg, image/png, image/gif" required><br>
+        <input type="file" id="image" name="image" accept="image/jpeg, image/png, image/gif"><br>
         <div id="image-error" class="error"></div>
-        <button type="submit">Add Product</button>
+        <button type="submit" id="product-submit-btn">Add Product</button>
     </form>
 
     <!-- 管理类别的表单 -->
     <form id="category-form">
         <h2>Manage Categories</h2>
+        <input type="hidden" id="category-id" name="category-id">
         <label for="category-name">Category Name:</label>
         <input type="text" id="category-name" name="category-name" required><br>
-        <button type="submit">Add Category</button>
+        <button type="submit" id="category-submit-btn">Add Category</button>
     </form>
 
     <!-- 产品列表 -->
@@ -102,7 +111,10 @@
                         const li = document.createElement('li');
                         li.innerHTML = `
                             ${product.name} - $${product.price}
-                            <button onclick="deleteProduct(${product.pid})">Delete</button>
+                            <div>
+                                <button class="edit-btn" onclick="editProduct(${product.pid})">Edit</button>
+                                <button onclick="deleteProduct(${product.pid})">Delete</button>
+                            </div>
                         `;
                         productList.appendChild(li);
                     });
@@ -120,7 +132,10 @@
                         const li = document.createElement('li');
                         li.innerHTML = `
                             ${category.name}
-                            <button onclick="deleteCategory(${category.catid})">Delete</button>
+                            <div>
+                                <button class="edit-btn" onclick="editCategory(${category.catid})">Edit</button>
+                                <button onclick="deleteCategory(${category.catid})">Delete</button>
+                            </div>
                         `;
                         categoryList.appendChild(li);
                     });
@@ -131,6 +146,7 @@
         document.getElementById('product-form').addEventListener('submit', (e) => {
             e.preventDefault();
             const formData = new FormData(e.target);
+            const productId = document.getElementById('product-id').value;
 
             // 图片大小验证（≤10MB）
             const imageFile = document.getElementById('image').files[0];
@@ -141,14 +157,20 @@
                 document.getElementById('image-error').textContent = '';
             }
 
-            fetch('/add-product', {
-                method: 'POST',
+            const url = productId ? `/update-product/${productId}` : '/add-product';
+            const method = productId ? 'PUT' : 'POST';
+
+            fetch(url, {
+                method: method,
                 body: formData
             })
             .then(response => response.text())
             .then(message => {
                 alert(message);
                 loadProducts(); // 重新加载产品列表
+                document.getElementById('product-form').reset();
+                document.getElementById('product-id').value = '';
+                document.getElementById('product-submit-btn').textContent = 'Add Product';
             })
             .catch(error => console.error('Error:', error));
         });
@@ -156,9 +178,14 @@
         // 提交类别表单
         document.getElementById('category-form').addEventListener('submit', (e) => {
             e.preventDefault();
+            const categoryId = document.getElementById('category-id').value;
             const categoryName = document.getElementById('category-name').value;
-            fetch('/add-category', {
-                method: 'POST',
+
+            const url = categoryId ? `/update-category/${categoryId}` : '/add-category';
+            const method = categoryId ? 'PUT' : 'POST';
+
+            fetch(url, {
+                method: method,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name: categoryName })
             })
@@ -167,9 +194,37 @@
                 alert(message);
                 loadCategories(); // 重新加载类别
                 loadCategoryList(); // 重新加载类别列表
+                document.getElementById('category-form').reset();
+                document.getElementById('category-id').value = '';
+                document.getElementById('category-submit-btn').textContent = 'Add Category';
             })
             .catch(error => console.error('Error:', error));
         });
+
+        // 编辑产品
+        function editProduct(pid) {
+            fetch(`/product/${pid}`)
+                .then(response => response.json())
+                .then(product => {
+                    document.getElementById('product-id').value = product.pid;
+                    document.getElementById('category').value = product.catid;
+                    document.getElementById('name').value = product.name;
+                    document.getElementById('price').value = product.price;
+                    document.getElementById('description').value = product.description;
+                    document.getElementById('product-submit-btn').textContent = 'Update Product';
+                });
+        }
+
+        // 编辑类别
+        function editCategory(catid) {
+            fetch(`/category/${catid}`)
+                .then(response => response.json())
+                .then(category => {
+                    document.getElementById('category-id').value = category.catid;
+                    document.getElementById('category-name').value = category.name;
+                    document.getElementById('category-submit-btn').textContent = 'Update Category';
+                });
+        }
 
         // 删除产品
         function deleteProduct(pid) {
