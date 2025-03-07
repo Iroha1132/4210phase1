@@ -41,12 +41,32 @@ app.get('/categories', (req, res) => {
     });
 });
 
+// 获取单个类别
+app.get('/category/:catid', (req, res) => {
+    const catid = req.params.catid;
+    const sql = 'SELECT * FROM categories WHERE catid = ?';
+    db.query(sql, [catid], (err, results) => {
+        if (err) throw err;
+        res.json(results[0]);
+    });
+});
+
 // 获取所有产品
 app.get('/products', (req, res) => {
     const sql = 'SELECT * FROM products';
     db.query(sql, (err, results) => {
         if (err) throw err;
         res.json(results);
+    });
+});
+
+// 获取单个产品
+app.get('/product/:pid', (req, res) => {
+    const pid = req.params.pid;
+    const sql = 'SELECT * FROM products WHERE pid = ?';
+    db.query(sql, [pid], (err, results) => {
+        if (err) throw err;
+        res.json(results[0]);
     });
 });
 
@@ -57,16 +77,6 @@ app.get('/products/:catid', (req, res) => {
     db.query(sql, [catid], (err, results) => {
         if (err) throw err;
         res.json(results);
-    });
-});
-
-// 获取产品详情
-app.get('/product/:pid', (req, res) => {
-    const pid = req.params.pid;
-    const sql = 'SELECT * FROM products WHERE pid = ?';
-    db.query(sql, [pid], (err, results) => {
-        if (err) throw err;
-        res.json(results[0]);
     });
 });
 
@@ -96,6 +106,33 @@ app.post('/add-product', upload.single('image'), (req, res) => {
     }
 });
 
+// 更新产品
+app.put('/update-product/:pid', upload.single('image'), (req, res) => {
+    const pid = req.params.pid;
+    const { catid, name, price, description } = req.body;
+    const imagePath = req.file ? req.file.path : null;
+
+    if (imagePath) {
+        sharp(imagePath)
+            .resize(200, 200)
+            .toFile(`uploads/thumbnail-${req.file.filename}`, (err) => {
+                if (err) throw err;
+                const thumbnailPath = `uploads/thumbnail-${req.file.filename}`;
+                const sql = 'UPDATE products SET catid = ?, name = ?, price = ?, description = ?, image = ?, thumbnail = ? WHERE pid = ?';
+                db.query(sql, [catid, name, price, description, imagePath, thumbnailPath, pid], (err, result) => {
+                    if (err) throw err;
+                    res.send('Product updated');
+                });
+            });
+    } else {
+        const sql = 'UPDATE products SET catid = ?, name = ?, price = ?, description = ? WHERE pid = ?';
+        db.query(sql, [catid, name, price, description, pid], (err, result) => {
+            if (err) throw err;
+            res.send('Product updated');
+        });
+    }
+});
+
 // 添加类别
 app.post('/add-category', (req, res) => {
     const { name } = req.body;
@@ -103,6 +140,17 @@ app.post('/add-category', (req, res) => {
     db.query(sql, [name], (err, result) => {
         if (err) throw err;
         res.send('Category added');
+    });
+});
+
+// 更新类别
+app.put('/update-category/:catid', (req, res) => {
+    const catid = req.params.catid;
+    const { name } = req.body;
+    const sql = 'UPDATE categories SET name = ? WHERE catid = ?';
+    db.query(sql, [name, catid], (err, result) => {
+        if (err) throw err;
+        res.send('Category updated');
     });
 });
 
