@@ -85,6 +85,10 @@ app.post('/add-product', upload.single('image'), (req, res) => {
     const { catid, name, price, description } = req.body;
     const imagePath = req.file ? req.file.path : null;
 
+    if (!catid) {
+        return res.status(400).send('Category ID is required.');
+    }
+
     if (imagePath) {
         sharp(imagePath)
             .resize(200, 200)
@@ -109,8 +113,12 @@ app.post('/add-product', upload.single('image'), (req, res) => {
 // 更新产品
 app.put('/update-product/:pid', upload.single('image'), (req, res) => {
     const pid = req.params.pid;
-    const { catid, name, price, description } = req.body;
+    const { catid, name, price, description } = req.body; // 确保 catid 被正确获取
     const imagePath = req.file ? req.file.path : null;
+
+    if (!catid) {
+        return res.status(400).send('Category ID is required.');
+    }
 
     if (imagePath) {
         sharp(imagePath)
