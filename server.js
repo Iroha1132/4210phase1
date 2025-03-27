@@ -202,7 +202,7 @@ app.get('/csrf-token', (req, res) => {
 });
 
 // 添加获取用户信息的路由
-app.get('/user-info', authenticate, (req, res) => {
+app.get('/user-info', authenticateAdmin, (req, res) => {
   const sql = 'SELECT email FROM users WHERE userid = ?';
   db.query(sql, [req.userId], (err, results) => {
     if (err || !results.length) {
@@ -212,7 +212,7 @@ app.get('/user-info', authenticate, (req, res) => {
   });
 });
 
-app.get('/check-admin', authenticate, (req, res) => {
+app.get('/check-admin', authenticateAdmin, (req, res) => {
   const sql = 'SELECT admin_flag FROM users WHERE userid = ?';
   db.query(sql, [req.userId], (err, results) => {
     if (err || !results.length) {
