@@ -7,10 +7,12 @@ body {
 }
 
 header {
-    background-color: #333;
-    color: #fff;
-    padding: 1rem;
-    text-align: center;
+  background-color: #333;
+  color: #fff;
+  padding: 1rem;
+  text-align: center;
+  position: relative; /* 为绝对定位的子元素提供参考 */
+  min-height: 60px; /* 确保有足够空间 */
 }
 
 nav ul {
@@ -101,16 +103,17 @@ footer {
 
 /* Shopping List */
 .shopping-list {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    background-color: #fff;
-    border: 1px solid #ddd;
-    border-radius: 5px;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-    width: 200px;
-    padding: 1rem;
-    transition: all 0.3s ease;
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background-color: #fff;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  width: 200px;
+  padding: 1rem;
+  transition: all 0.3s ease;
+  z-index: 99; /* 确保在用户状态下方 */
 }
 
 .shopping-list:hover {
@@ -164,11 +167,13 @@ footer {
 .user-status {
   position: absolute;
   top: 20px;
-  right: 20px;
+  right: 240px; /* 留出购物车的空间 */
   cursor: pointer;
   padding: 5px 10px;
   background-color: #f5f5f5;
   border-radius: 4px;
+  color: #333; /* 添加文字颜色 */
+  z-index: 100; /* 确保在导航栏上方 */
 }
 
 .user-status:hover {
