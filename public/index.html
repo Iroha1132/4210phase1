@@ -28,6 +28,10 @@
           <li><a href="#">Category 2</a></li>
         </ul>
       </nav>
+      <!-- 添加用户状态显示 -->
+      <div id="user-status" class="user-status">
+        <span id="user-email">Guest</span>
+      </div>
     </header>
 
     <main>
@@ -211,6 +215,44 @@
         }
       });
 
+      // 检查用户登录状态
+      function checkUserStatus() {
+        fetch("/user-info", {
+          credentials: "include",
+        })
+          .then((response) => {
+            if (response.ok) {
+              return response.json();
+            }
+            throw new Error("Not logged in");
+          })
+          .then((data) => {
+            if (data.email) {
+              document.getElementById("user-email").textContent = data.email;
+            }
+          })
+          .catch(() => {
+            document.getElementById("user-email").textContent = "Guest";
+          });
+      }
+
+      // 用户状态点击事件
+      document.getElementById("user-status").addEventListener("click", () => {
+        fetch("/check-auth", {
+          credentials: "include",
+        })
+          .then((response) => {
+            if (response.ok) {
+              window.location.href = "/user-dashboard.html";
+            } else {
+              window.location.href = "/login.html";
+            }
+          })
+          .catch(() => {
+            window.location.href = "/login.html";
+          });
+      });
+
       // 更新购物车 UI
       function updateCartUI() {
         const cart = JSON.parse(localStorage.getItem("cart")) || [];
@@ -237,6 +279,7 @@
 
       // 页面加载时恢复购物车
       window.addEventListener("load", () => {
+        checkUserStatus();
         updateCartUI();
       });
     </script>
