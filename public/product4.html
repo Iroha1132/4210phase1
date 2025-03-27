@@ -5,6 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Product 4 Details</title>
     <link rel="stylesheet" href="css/styles.css" />
+    <script>
+      // Redirect to HTTPS
+      if (
+        window.location.protocol !== "https:" &&
+        window.location.hostname !== "localhost"
+      ) {
+        window.location.href =
+          "https:" +
+          window.location.href.substring(window.location.protocol.length);
+      }
+    </script>
   </head>
   <body>
     <header>
@@ -78,7 +89,7 @@
     <script>
       // Load product details dynamically
       const productId = 4; // Change this for product2.html and product3.html
-      fetch(`http://104.214.187.206:3000/product/${productId}`)
+      fetch(`http://104.214.187.206/product/${productId}`)
         .then((response) => response.json())
         .then((product) => {
           const productDetails = document.getElementById("product-details");
@@ -92,7 +103,7 @@
         });
 
       // 动态加载类别
-      fetch("http://104.214.187.206:3000/categories")
+      fetch("http://104.214.187.206/categories")
         .then((response) => response.json())
         .then((categories) => {
           const categorySelect = document.getElementById("category-select");
@@ -110,7 +121,9 @@
         .addEventListener("change", (e) => {
           const catid = e.target.value;
           if (catid) {
-            fetch(`http://104.214.187.206:3000/products/${catid}`)
+            fetch(`https://104.214.187.206/product/${productId}`, {
+              credentials: "include",
+            })
               .then((response) => response.json())
               .then((products) => {
                 const productList = document.getElementById("product-list");
