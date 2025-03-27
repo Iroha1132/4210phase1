@@ -6,11 +6,18 @@ const path = require('path');
 const multer = require('multer');
 const sharp = require('sharp');
 const cors = require('cors');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const xss = require('xss');
+const csrf = require('csurf');
+const cookieParser = require('cookie-parser');
 
 const upload = multer({ dest: 'uploads/' });
 
 // 启用 CORS
 app.use(cors());
+app.use(cookieParser());
+app.use(csrf({ cookie: true }));
 
 // Database connection
 const db = mysql.createConnection({
@@ -30,7 +37,50 @@ app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// API Endpoints
+// 用户认证中间件
+const authenticate = (req, res, next) => {
+    const token = req.cookies.auth_token;
+    if (!token) {
+        return res.status(401).send('Unauthorized');
+    }
+    jwt.verify(token, 'secret_key', (err, decoded) => {
+        if (err) {
+            return res.status(401).send('Unauthorized');
+        }
+        req.userId = decoded.userId;
+        next();
+    });
+};
+
+// 密码更改
+app.post('/change-password', authenticate, (req, res) => {
+    const { currentPassword, newPassword } = req.body;
+    const userId = req.userId;
+
+    // 查询当前用户的密码
+    const sql = 'SELECT password FROM users WHERE userid = ?';
+    db.query(sql, [userId], (err, results) => {
+        if (err) throw err;
+        if (results.length > 0) {
+            const user = results[0];
+            // 验证当前密码
+            if (bcrypt.compareSync(currentPassword, user.password)) {
+                // 哈希新密码
+                const hashedPassword = bcrypt.hashSync(newPassword, 10);
+                // 更新数据库中的密码
+                const updateSql = 'UPDATE users SET password = ? WHERE userid = ?';
+                db.query(updateSql, [hashedPassword, userId], (err, result) => {
+                    if (err) throw err;
+                    res.json({ success: true });
+                });
+            } else {
+                res.json({ success: false, message: 'Current password is incorrect' });
+            }
+        } else {
+            res.json({ success: false, message: 'User not found' });
+        }
+    });
+});
 
 // 获取所有类别
 app.get('/categories', (req, res) => {
