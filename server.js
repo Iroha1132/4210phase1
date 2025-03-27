@@ -274,15 +274,10 @@ const options = {
   cert: fs.readFileSync('/etc/letsencrypt/live/ierg4210.eastasia.cloudapp.azure.com/fullchain.pem')
 };
 
-https.createServer(options, app).listen(443, () => {
-  console.log('HTTPS Server running on port 443');
-});
-
 // HTTP to HTTPS Redirect
-const http = require('http');
-http.createServer((req, res) => {
-  res.writeHead(301, { Location: `https://${req.headers.host}${req.url}` });
-  res.end();
-}).listen(80, () => {
-  console.log('HTTP redirect server running on port 80');
+const app = require('./app'); // 你的 Express/Koa 应用
+
+// 仅监听本地 3000 端口
+app.listen(3000, '127.0.0.1', () => {
+  console.log('Node.js running on http://localhost:3000');
 });
