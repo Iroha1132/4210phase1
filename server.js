@@ -90,6 +90,7 @@ app.get("/check-auth", authenticateAdmin, (req, res) => {
 });
 
 // User Authentication
+// 修改/login路由，添加用户类型判断
 app.post("/login", (req, res) => {
   const { email, password } = req.body;
   const sql = "SELECT * FROM users WHERE email = ?";
@@ -108,11 +109,17 @@ app.post("/login", (req, res) => {
           sameSite: "strict",
         });
         res.cookie("XSRF-TOKEN", req.csrfToken(), {
-          httpOnly: false, // 需要能被JavaScript读取
+          httpOnly: false,
           secure: process.env.NODE_ENV === "production",
           sameSite: "strict",
         });
-        return res.json({ success: true });
+        
+        // 根据用户类型返回不同的redirect路径
+        return res.json({ 
+          success: true,
+          isAdmin: user.admin_flag === 1,
+          redirect: user.admin_flag === 1 ? "/admin.html" : "/user-dashboard.html"
+        });
       }
     }
     res.json({ success: false });
