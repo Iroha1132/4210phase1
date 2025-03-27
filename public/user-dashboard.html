@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>User Dashboard</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f5f5f5;
+      }
+
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 30px;
+      }
+
+      .user-info {
+        background-color: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        margin-bottom: 20px;
+      }
+
+      .features {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 15px;
+      }
+
+      .feature-card {
+        background-color: white;
+        padding: 15px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        cursor: pointer;
+        transition: transform 0.3s;
+      }
+
+      .feature-card:hover {
+        transform: translateY(-5px);
+      }
+
+      button {
+        background-color: #4caf50;
+        color: white;
+        border: none;
+        padding: 10px 15px;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+
+      button.logout {
+        background-color: #f44336;
+      }
+
+      h2 {
+        color: #333;
+        margin-top: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <h1>Welcome, <span id="username">User</span>!</h1>
+      <button class="logout" onclick="logout()">Logout</button>
+    </div>
+
+    <div class="user-info">
+      <h2>Your Information</h2>
+      <p>Email: <span id="user-email">user@example.com</span></p>
+      <p>Account Type: <span id="account-type">Standard User</span></p>
+    </div>
+
+    <div class="features">
+      <div class="feature-card" onclick="viewProfile()">
+        <h3>View Profile</h3>
+        <p>View and edit your personal information</p>
+      </div>
+
+      <div class="feature-card" onclick="viewOrders()">
+        <h3>Your Orders</h3>
+        <p>Check your order history</p>
+      </div>
+
+      <div class="feature-card" onclick="changePassword()">
+        <h3>Change Password</h3>
+        <p>Update your account password</p>
+      </div>
+
+      <div class="feature-card" onclick="contactSupport()">
+        <h3>Contact Support</h3>
+        <p>Get help from our support team</p>
+      </div>
+    </div>
+
+    <script>
+      // 页面加载时获取用户信息
+      window.addEventListener("load", () => {
+        fetch("/user-info", {
+          credentials: "include",
+        })
+          .then((response) => response.json())
+          .then((data) => {
+            if (data.email) {
+              document.getElementById("username").textContent =
+                data.email.split("@")[0];
+              document.getElementById("user-email").textContent = data.email;
+            }
+          })
+          .catch((error) => {
+            console.error("Error fetching user info:", error);
+          });
+      });
+
+      // 登出功能
+      function logout() {
+        fetch("/logout", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": getCookie("XSRF-TOKEN"),
+          },
+        }).then(() => {
+          window.location.href = "/login.html";
+        });
+      }
+
+      // 获取Cookie的函数
+      function getCookie(name) {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop().split(";").shift();
+      }
+
+      // 功能按钮的示例函数
+      function viewProfile() {
+        alert("Profile view functionality will be implemented here");
+      }
+
+      function viewOrders() {
+        alert("Order history will be displayed here");
+      }
+
+      function changePassword() {
+        window.location.href = "/change-password.html";
+      }
+
+      function contactSupport() {
+        window.location.href = "mailto:support@example.com";
+      }
+    </script>
+  </body>
+</html>
