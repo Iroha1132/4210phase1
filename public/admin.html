@@ -246,6 +246,7 @@
         if (parts.length === 2) return parts.pop().split(";").shift();
       }
 
+      // 修改checkAuth函数
       function checkAuth() {
         fetch("/check-auth", {
           credentials: "include",
@@ -255,16 +256,28 @@
             return response.json();
           })
           .then((data) => {
-            // 新增管理员权限检查
-            fetch("/check-admin", { credentials: "include" }) // 需要在后端创建这个路由
+            // 检查是否是管理员
+            fetch("/check-admin", { credentials: "include" })
               .then((res) => res.json())
               .then((adminData) => {
                 if (!adminData.isAdmin) {
-                  window.location.href = "/user-dashboard.html"; // 重定向到普通用户页面
+                  window.location.href = "/user-dashboard.html";
                 } else {
                   // 加载管理界面
                   loadCategories();
                   loadProducts();
+                  loadCategoryList();
+                  // 获取CSRF令牌并填充到表单
+                  fetch("/csrf-token", { credentials: "include" })
+                    .then((res) => res.json())
+                    .then((data) => {
+                      document.getElementById("csrf-token-pw").value =
+                        data.csrfToken;
+                      document.getElementById("csrf-token-product").value =
+                        data.csrfToken;
+                      document.getElementById("csrf-token-category").value =
+                        data.csrfToken;
+                    });
                 }
               });
           })
@@ -272,6 +285,21 @@
             window.location.href = "/login.html";
           });
       }
+
+      // 在页面加载时获取CSRF令牌
+      window.addEventListener("load", () => {
+        checkAuth();
+        loadCategories();
+        loadProducts();
+        loadCategoryList();
+
+        // 获取CSRF令牌并填充到密码修改表单
+        fetch("/csrf-token", { credentials: "include" })
+          .then((res) => res.json())
+          .then((data) => {
+            document.getElementById("csrf-token-pw").value = data.csrfToken;
+          });
+      });
 
       function logout() {
         fetch("/logout", {
