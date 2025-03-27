@@ -159,9 +159,7 @@
         .addEventListener("change", (e) => {
           const catid = e.target.value;
           if (catid) {
-            fetch(
-              `http://ierg4210.eastasia.cloudapp.azure.com/products/${catid}`
-            )
+            fetch(`https://${window.location.host}/products/${catid}`)
               .then((response) => response.json())
               .then((products) => {
                 const productList = document.getElementById("product-list");
