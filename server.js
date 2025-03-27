@@ -270,8 +270,8 @@ app.delete('/delete-category/:catid', authenticate, (req, res) => {
 
 // HTTPS Server Setup
 const options = {
-  key: fs.readFileSync('/etc/letsencrypt/live/104.214.187.206/privkey.pem'),
-  cert: fs.readFileSync('/etc/letsencrypt/live/104.214.187.206/fullchain.pem')
+  key: fs.readFileSync('/etc/letsencrypt/live/ierg4210.eastasia.cloudapp.azure.com/privkey.pem'),
+  cert: fs.readFileSync('/etc/letsencrypt/live/ierg4210.eastasia.cloudapp.azure.com6/fullchain.pem')
 };
 
 https.createServer(options, app).listen(443, () => {
