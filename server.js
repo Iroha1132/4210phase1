@@ -65,22 +65,27 @@ app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, "public")));
 
 // Authentication Middleware
-const authenticate = (req, res, next) => {
+const authenticateAdmin = (req, res, next) => {
   const token = req.cookies.auth_token;
-  if (!token) {
-    return res.status(401).json({ authenticated: false });
-  }
-  jwt.verify(token, "secret_key", (err, decoded) => {
-    if (err) {
-      return res.status(401).json({ authenticated: false });
-    }
-    req.userId = decoded.userId;
-    next();
+  if (!token) return res.status(401).json({ authenticated: false });
+
+  jwt.verify(token, 'secret_key', (err, decoded) => {
+    if (err) return res.status(401).json({ authenticated: false });
+    
+    // 新增管理员权限检查
+    const sql = 'SELECT admin_flag FROM users WHERE userid = ?';
+    db.query(sql, [decoded.userId], (err, results) => {
+      if (err || !results.length || !results[0].admin_flag) {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+      req.userId = decoded.userId;
+      next();
+    });
   });
 };
 
 // Routes
-app.get("/check-auth", authenticate, (req, res) => {
+app.get("/check-auth", authenticateAdmin, (req, res) => {
   res.json({ authenticated: true });
 });
 
@@ -120,7 +125,7 @@ app.post("/logout", (req, res) => {
 });
 
 // Password Change
-app.post("/change-password", authenticate, (req, res) => {
+app.post("/change-password", authenticateAdmin, (req, res) => {
   const { currentPassword, newPassword } = req.body;
   const userId = req.userId;
 
@@ -196,8 +201,29 @@ app.get('/csrf-token', (req, res) => {
   res.json({ csrfToken: req.csrfToken() });
 });
 
+// 添加获取用户信息的路由
+app.get('/user-info', authenticate, (req, res) => {
+  const sql = 'SELECT email FROM users WHERE userid = ?';
+  db.query(sql, [req.userId], (err, results) => {
+    if (err || !results.length) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    res.json({ email: results[0].email });
+  });
+});
+
+app.get('/check-admin', authenticate, (req, res) => {
+  const sql = 'SELECT admin_flag FROM users WHERE userid = ?';
+  db.query(sql, [req.userId], (err, results) => {
+    if (err || !results.length) {
+      return res.status(403).json({ isAdmin: false });
+    }
+    res.json({ isAdmin: results[0].admin_flag === 1 });
+  });
+});
+
 // Add Product with XSS protection
-app.post("/add-product", upload.single("image"), authenticate, (req, res) => {
+app.post("/add-product", upload.single("image"), authenticateAdmin, (req, res) => {
   const { catid, name, price, description } = req.body;
   const sanitizedName = xss(name);
   const sanitizedDescription = xss(description);
@@ -245,7 +271,7 @@ app.post("/add-product", upload.single("image"), authenticate, (req, res) => {
 app.put(
   "/update-product/:pid",
   upload.single("image"),
-  authenticate,
+  authenticateAdmin,
   (req, res) => {
     const pid = xss(req.params.pid);
     const { catid, name, price, description } = req.body;
@@ -294,7 +320,7 @@ app.put(
 );
 
 // Categories with XSS protection
-app.post("/add-category", authenticate, (req, res) => {
+app.post("/add-category", authenticateAdmin, (req, res) => {
   const { name } = req.body;
   const sanitizedName = xss(name);
   const sql = "INSERT INTO categories (name) VALUES (?)";
@@ -304,7 +330,7 @@ app.post("/add-category", authenticate, (req, res) => {
   });
 });
 
-app.put("/update-category/:catid", authenticate, (req, res) => {
+app.put("/update-category/:catid", authenticateAdmin, (req, res) => {
   const catid = xss(req.params.catid);
   const { name } = req.body;
   const sanitizedName = xss(name);
@@ -316,7 +342,7 @@ app.put("/update-category/:catid", authenticate, (req, res) => {
 });
 
 // Delete Operations
-app.delete("/delete-product/:pid", authenticate, (req, res) => {
+app.delete("/delete-product/:pid", authenticateAdmin, (req, res) => {
   const pid = xss(req.params.pid);
   const sql = "DELETE FROM products WHERE pid = ?";
   db.query(sql, [pid], (err, result) => {
@@ -325,7 +351,7 @@ app.delete("/delete-product/:pid", authenticate, (req, res) => {
   });
 });
 
-app.delete("/delete-category/:catid", authenticate, (req, res) => {
+app.delete("/delete-category/:catid", authenticateAdmin, (req, res) => {
   const catid = xss(req.params.catid);
   const sql = "DELETE FROM categories WHERE catid = ?";
   db.query(sql, [catid], (err, result) => {
