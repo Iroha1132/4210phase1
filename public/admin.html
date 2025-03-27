@@ -5,6 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Admin Panel</title>
     <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+
       .error {
         color: red;
         font-size: 0.9em;
@@ -26,7 +33,6 @@
       }
 
       button {
-        background-color: #ff4d4d;
         color: white;
         border: none;
         padding: 5px 10px;
@@ -34,110 +40,203 @@
         cursor: pointer;
       }
 
-      button:hover {
+      button.delete {
+        background-color: #ff4d4d;
+      }
+
+      button.delete:hover {
         background-color: #cc0000;
       }
 
-      .edit-btn {
+      button.edit {
         background-color: #4caf50;
         margin-right: 5px;
       }
 
-      .edit-btn:hover {
+      button.edit:hover {
         background-color: #45a049;
+      }
+
+      form {
+        margin-bottom: 20px;
+        padding: 15px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+      }
+
+      label {
+        display: block;
+        margin: 10px 0 5px;
+      }
+
+      input,
+      select,
+      textarea {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+      }
+
+      .form-section {
+        margin-bottom: 30px;
+      }
+
+      .logout-btn {
+        background-color: #555;
+        padding: 8px 15px;
+        float: right;
       }
     </style>
   </head>
 
   <body>
+    <button class="logout-btn" onclick="logout()">Logout</button>
     <h1>Admin Panel</h1>
 
-    <!-- 密码更改表单 -->
-    <h2>Change Password</h2>
-    <form id="change-password-form">
-      <label for="current-password">Current Password:</label>
-      <input
-        type="password"
-        id="current-password"
-        name="current-password"
-        required
-      /><br />
-      <label for="new-password">New Password:</label>
-      <input
-        type="password"
-        id="new-password"
-        name="new-password"
-        required
-      /><br />
-      <label for="confirm-password">Confirm New Password:</label>
-      <input
-        type="password"
-        id="confirm-password"
-        name="confirm-password"
-        required
-      /><br />
-      <button type="submit">Change Password</button>
-    </form>
+    <div class="form-section">
+      <h2>Change Password</h2>
+      <form id="change-password-form">
+        <input type="hidden" id="csrf-token-pw" name="_csrf" />
+        <label for="current-password">Current Password:</label>
+        <input
+          type="password"
+          id="current-password"
+          name="current-password"
+          required
+        />
+        <label for="new-password">New Password:</label>
+        <input
+          type="password"
+          id="new-password"
+          name="new-password"
+          required
+          minlength="8"
+        />
+        <label for="confirm-password">Confirm New Password:</label>
+        <input
+          type="password"
+          id="confirm-password"
+          name="confirm-password"
+          required
+          minlength="8"
+        />
+        <button type="submit">Change Password</button>
+      </form>
+    </div>
 
-    <!-- 管理产品的表单 -->
-    <form id="product-form">
-      <h2>Manage Products</h2>
-      <input type="hidden" id="product-id" name="pid" />
-      <label for="category">Category:</label>
-      <select id="category" name="catid" required>
-        <option value="">-- Select a Category --</option>
-        <!-- 动态加载类别 --></select
-      ><br />
-      <label for="name">Product Name:</label>
-      <input type="text" id="name" name="name" required /><br />
-      <label for="price">Price:</label>
-      <input
-        type="number"
-        id="price"
-        name="price"
-        step="0.01"
-        min="0"
-        required
-      /><br />
-      <label for="description">Description:</label>
-      <textarea id="description" name="description" required></textarea><br />
-      <label for="image">Product Image:</label>
-      <input
-        type="file"
-        id="image"
-        name="image"
-        accept="image/jpeg, image/png, image/gif"
-      /><br />
-      <div id="image-error" class="error"></div>
-      <button type="submit" id="product-submit-btn">Add Product</button>
-    </form>
+    <div class="form-section">
+      <form id="product-form">
+        <h2>Manage Products</h2>
+        <input type="hidden" id="csrf-token-product" name="_csrf" />
+        <input type="hidden" id="product-id" name="pid" />
+        <label for="category">Category:</label>
+        <select id="category" name="catid" required>
+          <option value="">-- Select a Category --</option>
+        </select>
+        <label for="name">Product Name:</label>
+        <input type="text" id="name" name="name" required maxlength="100" />
+        <label for="price">Price:</label>
+        <input
+          type="number"
+          id="price"
+          name="price"
+          step="0.01"
+          min="0"
+          required
+        />
+        <label for="description">Description:</label>
+        <textarea
+          id="description"
+          name="description"
+          required
+          maxlength="500"
+        ></textarea>
+        <label for="image">Product Image:</label>
+        <input
+          type="file"
+          id="image"
+          name="image"
+          accept="image/jpeg, image/png, image/gif"
+        />
+        <div id="image-error" class="error"></div>
+        <button type="submit" id="product-submit-btn">Add Product</button>
+      </form>
+    </div>
 
-    <!-- 管理类别的表单 -->
-    <form id="category-form">
-      <h2>Manage Categories</h2>
-      <input type="hidden" id="category-id" name="category-id" />
-      <label for="category-name">Category Name:</label>
-      <input
-        type="text"
-        id="category-name"
-        name="category-name"
-        required
-      /><br />
-      <button type="submit" id="category-submit-btn">Add Category</button>
-    </form>
+    <div class="form-section">
+      <form id="category-form">
+        <h2>Manage Categories</h2>
+        <input type="hidden" id="csrf-token-category" name="_csrf" />
+        <input type="hidden" id="category-id" name="category-id" />
+        <label for="category-name">Category Name:</label>
+        <input
+          type="text"
+          id="category-name"
+          name="category-name"
+          required
+          maxlength="50"
+        />
+        <button type="submit" id="category-submit-btn">Add Category</button>
+      </form>
+    </div>
 
-    <!-- 产品列表 -->
-    <h2>Product List</h2>
-    <ul id="product-list"></ul>
+    <div class="form-section">
+      <h2>Product List</h2>
+      <ul id="product-list"></ul>
+    </div>
 
-    <!-- 类别列表 -->
-    <h2>Category List</h2>
-    <ul id="category-list"></ul>
+    <div class="form-section">
+      <h2>Category List</h2>
+      <ul id="category-list"></ul>
+    </div>
 
     <script>
-      // 动态加载类别
+      function getCookie(name) {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop().split(";").shift();
+      }
+
+      function checkAuth() {
+        fetch("/check-auth", {
+          credentials: "include",
+        })
+          .then((response) => response.json())
+          .then((data) => {
+            if (!data.authenticated) {
+              window.location.href = "/login.html";
+            } else {
+              // Set CSRF tokens for all forms
+              const csrfToken = getCookie("XSRF-TOKEN");
+              document.getElementById("csrf-token-pw").value = csrfToken;
+              document.getElementById("csrf-token-product").value = csrfToken;
+              document.getElementById("csrf-token-category").value = csrfToken;
+            }
+          })
+          .catch(() => {
+            window.location.href = "/login.html";
+          });
+      }
+
+      function logout() {
+        fetch("/logout", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": getCookie("XSRF-TOKEN"),
+          },
+        }).then(() => {
+          window.location.href = "/login.html";
+        });
+      }
+
+      // Load categories
       function loadCategories() {
-        fetch("/categories")
+        fetch("/categories", {
+          credentials: "include",
+        })
           .then((response) => response.json())
           .then((categories) => {
             const categorySelect = document.getElementById("category");
@@ -152,9 +251,11 @@
           });
       }
 
-      // 动态加载产品
+      // Load products
       function loadProducts() {
-        fetch("/products")
+        fetch("/products", {
+          credentials: "include",
+        })
           .then((response) => response.json())
           .then((products) => {
             const productList = document.getElementById("product-list");
@@ -162,20 +263,22 @@
             products.forEach((product) => {
               const li = document.createElement("li");
               li.innerHTML = `
-                            ${product.name} - $${product.price}
-                            <div>
-                                <button class="edit-btn" onclick="editProduct(${product.pid})">Edit</button>
-                                <button onclick="deleteProduct(${product.pid})">Delete</button>
-                            </div>
-                        `;
+                ${product.name} - $${product.price}
+                <div>
+                  <button class="edit" onclick="editProduct(${product.pid})">Edit</button>
+                  <button class="delete" onclick="deleteProduct(${product.pid})">Delete</button>
+                </div>
+              `;
               productList.appendChild(li);
             });
           });
       }
 
-      // 动态加载类别列表
+      // Load category list
       function loadCategoryList() {
-        fetch("/categories")
+        fetch("/categories", {
+          credentials: "include",
+        })
           .then((response) => response.json())
           .then((categories) => {
             const categoryList = document.getElementById("category-list");
@@ -183,18 +286,18 @@
             categories.forEach((category) => {
               const li = document.createElement("li");
               li.innerHTML = `
-                            ${category.name}
-                            <div>
-                                <button class="edit-btn" onclick="editCategory(${category.catid})">Edit</button>
-                                <button onclick="deleteCategory(${category.catid})">Delete</button>
-                            </div>
-                        `;
+                ${category.name}
+                <div>
+                  <button class="edit" onclick="editCategory(${category.catid})">Edit</button>
+                  <button class="delete" onclick="deleteCategory(${category.catid})">Delete</button>
+                </div>
+              `;
               categoryList.appendChild(li);
             });
           });
       }
 
-      // 提交密码更改表单
+      // Change password
       document
         .getElementById("change-password-form")
         .addEventListener("submit", (e) => {
@@ -204,6 +307,7 @@
           const newPassword = document.getElementById("new-password").value;
           const confirmPassword =
             document.getElementById("confirm-password").value;
+          const csrfToken = document.getElementById("csrf-token-pw").value;
 
           if (newPassword !== confirmPassword) {
             alert("New passwords do not match");
@@ -212,30 +316,34 @@
 
           fetch("/change-password", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              "X-CSRF-Token": csrfToken,
+            },
+            credentials: "include",
             body: JSON.stringify({ currentPassword, newPassword }),
           })
             .then((response) => response.json())
             .then((data) => {
               if (data.success) {
                 alert("Password changed successfully");
-                window.location.href = "/login.html"; // 重定向到登录页面
+                window.location.href = "/login.html";
               } else {
-                alert("Failed to change password");
+                alert(data.message || "Failed to change password");
               }
             })
             .catch((error) => console.error("Error:", error));
         });
 
-      // 提交产品表单
+      // Product form
       document
         .getElementById("product-form")
         .addEventListener("submit", (e) => {
           e.preventDefault();
           const formData = new FormData(e.target);
           const productId = document.getElementById("product-id").value;
+          const csrfToken = document.getElementById("csrf-token-product").value;
 
-          // 图片大小验证（≤10MB）
           const imageFile = document.getElementById("image").files[0];
           if (imageFile && imageFile.size > 10 * 1024 * 1024) {
             document.getElementById("image-error").textContent =
@@ -252,12 +360,16 @@
 
           fetch(url, {
             method: method,
+            headers: {
+              "X-CSRF-Token": csrfToken,
+            },
+            credentials: "include",
             body: formData,
           })
             .then((response) => response.text())
             .then((message) => {
               alert(message);
-              loadProducts(); // 重新加载产品列表
+              loadProducts();
               document.getElementById("product-form").reset();
               document.getElementById("product-id").value = "";
               document.getElementById("product-submit-btn").textContent =
@@ -266,13 +378,16 @@
             .catch((error) => console.error("Error:", error));
         });
 
-      // 提交类别表单
+      // Category form
       document
         .getElementById("category-form")
         .addEventListener("submit", (e) => {
           e.preventDefault();
           const categoryId = document.getElementById("category-id").value;
           const categoryName = document.getElementById("category-name").value;
+          const csrfToken = document.getElementById(
+            "csrf-token-category"
+          ).value;
 
           const url = categoryId
             ? `/update-category/${categoryId}`
@@ -281,14 +396,18 @@
 
           fetch(url, {
             method: method,
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              "X-CSRF-Token": csrfToken,
+            },
+            credentials: "include",
             body: JSON.stringify({ name: categoryName }),
           })
             .then((response) => response.text())
             .then((message) => {
               alert(message);
-              loadCategories(); // 重新加载类别
-              loadCategoryList(); // 重新加载类别列表
+              loadCategories();
+              loadCategoryList();
               document.getElementById("category-form").reset();
               document.getElementById("category-id").value = "";
               document.getElementById("category-submit-btn").textContent =
@@ -297,9 +416,11 @@
             .catch((error) => console.error("Error:", error));
         });
 
-      // 编辑产品
+      // Edit product
       function editProduct(pid) {
-        fetch(`/product/${pid}`)
+        fetch(`/product/${pid}`, {
+          credentials: "include",
+        })
           .then((response) => response.json())
           .then((product) => {
             document.getElementById("product-id").value = product.pid;
@@ -312,9 +433,11 @@
           });
       }
 
-      // 编辑类别
+      // Edit category
       function editCategory(catid) {
-        fetch(`/category/${catid}`)
+        fetch(`/category/${catid}`, {
+          credentials: "include",
+        })
           .then((response) => response.json())
           .then((category) => {
             document.getElementById("category-id").value = category.catid;
@@ -324,35 +447,48 @@
           });
       }
 
-      // 删除产品
+      // Delete product
       function deleteProduct(pid) {
         if (confirm("Are you sure you want to delete this product?")) {
-          fetch(`/delete-product/${pid}`, { method: "DELETE" })
+          fetch(`/delete-product/${pid}`, {
+            method: "DELETE",
+            headers: {
+              "X-CSRF-Token": getCookie("XSRF-TOKEN"),
+            },
+            credentials: "include",
+          })
             .then((response) => response.text())
             .then((message) => {
               alert(message);
-              loadProducts(); // 重新加载产品列表
+              loadProducts();
             })
             .catch((error) => console.error("Error:", error));
         }
       }
 
-      // 删除类别
+      // Delete category
       function deleteCategory(catid) {
         if (confirm("Are you sure you want to delete this category?")) {
-          fetch(`/delete-category/${catid}`, { method: "DELETE" })
+          fetch(`/delete-category/${catid}`, {
+            method: "DELETE",
+            headers: {
+              "X-CSRF-Token": getCookie("XSRF-TOKEN"),
+            },
+            credentials: "include",
+          })
             .then((response) => response.text())
             .then((message) => {
               alert(message);
-              loadCategories(); // 重新加载类别
-              loadCategoryList(); // 重新加载类别列表
+              loadCategories();
+              loadCategoryList();
             })
             .catch((error) => console.error("Error:", error));
         }
       }
 
-      // 页面加载时初始化
+      // Initialize
       window.addEventListener("load", () => {
+        checkAuth();
         loadCategories();
         loadProducts();
         loadCategoryList();
