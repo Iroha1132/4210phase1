@@ -250,17 +250,23 @@
         fetch("/check-auth", {
           credentials: "include",
         })
-          .then((response) => response.json())
+          .then((response) => {
+            if (!response.ok) throw new Error("Not authenticated");
+            return response.json();
+          })
           .then((data) => {
-            if (!data.authenticated) {
-              window.location.href = "/login.html";
-            } else {
-              // Set CSRF tokens for all forms
-              const csrfToken = getCookie("XSRF-TOKEN");
-              document.getElementById("csrf-token-pw").value = csrfToken;
-              document.getElementById("csrf-token-product").value = csrfToken;
-              document.getElementById("csrf-token-category").value = csrfToken;
-            }
+            // 新增管理员权限检查
+            fetch("/check-admin", { credentials: "include" }) // 需要在后端创建这个路由
+              .then((res) => res.json())
+              .then((adminData) => {
+                if (!adminData.isAdmin) {
+                  window.location.href = "/user-dashboard.html"; // 重定向到普通用户页面
+                } else {
+                  // 加载管理界面
+                  loadCategories();
+                  loadProducts();
+                }
+              });
           })
           .catch(() => {
             window.location.href = "/login.html";
