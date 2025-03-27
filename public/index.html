@@ -139,7 +139,7 @@
 
     <script>
       // 动态加载类别
-      fetch("https://104.214.187.206/categories", {
+      fetch("https://ierg4210.eastasia.cloudapp.azure.com/categories", {
         credentials: "include",
       })
         .then((response) => response.json())
@@ -159,7 +159,9 @@
         .addEventListener("change", (e) => {
           const catid = e.target.value;
           if (catid) {
-            fetch(`http://104.214.187.206/products/${catid}`)
+            fetch(
+              `http://ierg4210.eastasia.cloudapp.azure.com/products/${catid}`
+            )
               .then((response) => response.json())
               .then((products) => {
                 const productList = document.getElementById("product-list");
