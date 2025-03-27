@@ -68,14 +68,14 @@
   </head>
   <body>
     <div class="header">
-      <h1>Welcome, <span id="username">User</span>!</h1>
-      <button class="logout" onclick="logout()">Logout</button>
+      <h1>Welcome, <span id="username">Guest</span>!</h1>
+      <button class="logout" onclick="logout()" id="logout-btn">Logout</button>
     </div>
 
     <div class="user-info">
       <h2>Your Information</h2>
-      <p>Email: <span id="user-email">user@example.com</span></p>
-      <p>Account Type: <span id="account-type">Standard User</span></p>
+      <p>Email: <span id="user-email">Not logged in</span></p>
+      <p>Account Type: <span id="account-type">Guest</span></p>
     </div>
 
     <div class="features">
@@ -101,23 +101,51 @@
     </div>
 
     <script>
-      // 页面加载时获取用户信息
-      window.addEventListener("load", () => {
-        fetch("/user-info", {
+      // 检查用户是否登录
+      function checkAuth() {
+        fetch("/check-auth", {
           credentials: "include",
         })
-          .then((response) => response.json())
+          .then((response) => {
+            if (!response.ok) {
+              // 未登录状态
+              document.getElementById("username").textContent = "Guest";
+              document.getElementById("user-email").textContent =
+                "Not logged in";
+              document.getElementById("account-type").textContent = "Guest";
+              document.getElementById("logout-btn").style.display = "none";
+              return;
+            }
+            return response.json();
+          })
           .then((data) => {
-            if (data.email) {
-              document.getElementById("username").textContent =
-                data.email.split("@")[0];
-              document.getElementById("user-email").textContent = data.email;
+            if (data && data.authenticated) {
+              // 已登录状态，获取用户信息
+              fetch("/user-info", {
+                credentials: "include",
+              })
+                .then((response) => response.json())
+                .then((userData) => {
+                  if (userData.email) {
+                    const username = userData.email.split("@")[0];
+                    document.getElementById("username").textContent = username;
+                    document.getElementById("user-email").textContent =
+                      userData.email;
+                    document.getElementById("account-type").textContent =
+                      "Registered User";
+                    document.getElementById("logout-btn").style.display =
+                      "block";
+                  }
+                });
             }
           })
           .catch((error) => {
-            console.error("Error fetching user info:", error);
+            console.error("Error checking auth status:", error);
           });
-      });
+      }
+
+      // 页面加载时检查认证状态
+      window.addEventListener("load", checkAuth);
 
       // 登出功能
       function logout() {
@@ -128,9 +156,13 @@
             "Content-Type": "application/json",
             "X-CSRF-Token": getCookie("XSRF-TOKEN"),
           },
-        }).then(() => {
-          window.location.href = "/login.html";
-        });
+        })
+          .then(() => {
+            window.location.href = "/login.html";
+          })
+          .catch((error) => {
+            console.error("Logout failed:", error);
+          });
       }
 
       // 获取Cookie的函数
@@ -138,19 +170,55 @@
         const value = `; ${document.cookie}`;
         const parts = value.split(`; ${name}=`);
         if (parts.length === 2) return parts.pop().split(";").shift();
+        return null;
       }
 
-      // 功能按钮的示例函数
+      // 密码修改功能
+      function changePassword() {
+        // 首先检查用户是否登录
+        fetch("/check-auth", {
+          credentials: "include",
+        })
+          .then((response) => {
+            if (!response.ok) {
+              alert("Please login first to change your password");
+              window.location.href = "/login.html";
+              return;
+            }
+            // 用户已登录，跳转到密码修改页面
+            window.location.href = "/change-password.html";
+          })
+          .catch((error) => {
+            console.error("Error checking auth:", error);
+            alert("Error checking authentication status");
+          });
+      }
+
+      // 其他功能按钮的示例函数
       function viewProfile() {
-        alert("Profile view functionality will be implemented here");
+        fetch("/check-auth", {
+          credentials: "include",
+        }).then((response) => {
+          if (!response.ok) {
+            alert("Please login to view your profile");
+            window.location.href = "/login.html";
+            return;
+          }
+          alert("Profile view functionality will be implemented here");
+        });
       }
 
       function viewOrders() {
-        alert("Order history will be displayed here");
-      }
-
-      function changePassword() {
-        window.location.href = "/change-password.html";
+        fetch("/check-auth", {
+          credentials: "include",
+        }).then((response) => {
+          if (!response.ok) {
+            alert("Please login to view your orders");
+            window.location.href = "/login.html";
+            return;
+          }
+          alert("Order history will be displayed here");
+        });
       }
 
       function contactSupport() {
