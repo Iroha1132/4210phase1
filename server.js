@@ -274,9 +274,6 @@ const options = {
   cert: fs.readFileSync('/etc/letsencrypt/live/ierg4210.eastasia.cloudapp.azure.com/fullchain.pem')
 };
 
-// HTTP to HTTPS Redirect
-const app = require('./app'); // 你的 Express/Koa 应用
-
 // 仅监听本地 3000 端口
 app.listen(3000, '127.0.0.1', () => {
   console.log('Node.js running on http://localhost:3000');
