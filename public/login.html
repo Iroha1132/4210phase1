@@ -11,16 +11,19 @@
         margin: 0 auto;
         padding: 20px;
       }
+
       form {
         display: flex;
         flex-direction: column;
         gap: 10px;
       }
+
       input {
         padding: 8px;
         border: 1px solid #ccc;
         border-radius: 4px;
       }
+
       button {
         padding: 10px;
         background-color: #4caf50;
@@ -29,11 +32,13 @@
         border-radius: 4px;
         cursor: pointer;
       }
+
       .error {
         color: red;
       }
     </style>
   </head>
+
   <body>
     <h1>Login</h1>
     <form id="login-form">
@@ -54,9 +59,25 @@
       }
 
       document.addEventListener("DOMContentLoaded", () => {
+        // 从cookie中获取CSRF令牌
+        function getCookie(name) {
+          const value = `; ${document.cookie}`;
+          const parts = value.split(`; ${name}=`);
+          if (parts.length === 2) return parts.pop().split(";").shift();
+        }
+
         const csrfToken = getCookie("XSRF-TOKEN");
         document.getElementById("csrf-token").value = csrfToken;
       });
+
+      // 在页面加载时获取CSRF令牌
+      fetch("/csrf-token", {
+        credentials: "include",
+      })
+        .then((response) => response.json())
+        .then((data) => {
+          document.getElementById("csrf-token").value = data.csrfToken;
+        });
 
       document.getElementById("login-form").addEventListener("submit", (e) => {
         e.preventDefault();
@@ -68,7 +89,7 @@
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "X-CSRF-Token": csrfToken,
+            "X-CSRF-Token": document.getElementById("csrf-token").value,
           },
           credentials: "include",
           body: JSON.stringify({ email, password }),
