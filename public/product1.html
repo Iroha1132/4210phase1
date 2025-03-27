@@ -90,7 +90,7 @@
     <script>
       // Load product details dynamically
       const productId = 1; // Change this for product2.html and product3.html
-      fetch(`http://ierg4210.eastasia.cloudapp.azure.com/product/${productId}`)
+      fetch(`https://${window.location.host}/product/${productId}`)
         .then((response) => response.json())
         .then((product) => {
           const productDetails = document.getElementById("product-details");
@@ -104,7 +104,7 @@
         });
 
       // 动态加载类别
-      fetch("http://ierg4210.eastasia.cloudapp.azure.com/categories")
+      fetch("https://${window.location.host}/categories")
         .then((response) => response.json())
         .then((categories) => {
           const categorySelect = document.getElementById("category-select");
