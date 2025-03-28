@@ -167,8 +167,9 @@
     </div>
 
     <script>
-      // 页面加载时获取用户信息
+      // 页面加载时获取用户信息和CSRF令牌
       window.addEventListener("load", () => {
+        // 获取用户信息
         fetch("/user-info", {
           credentials: "include",
         })
@@ -183,7 +184,27 @@
           .catch((error) => {
             console.error("Error fetching user info:", error);
           });
+
+        // 获取CSRF令牌并填充到密码修改表单
+        fetch("/csrf-token", { credentials: "include" })
+          .then((res) => {
+            if (!res.ok) throw new Error("Failed to get CSRF token");
+            return res.json();
+          })
+          .then((data) => {
+            document.getElementById("csrf-token-pw").value = data.csrfToken;
+          })
+          .catch((error) => {
+            console.error("Error fetching CSRF token:", error);
+          });
       });
+
+      // 获取Cookie的函数
+      function getCookie(name) {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop().split(";").shift();
+      }
 
       // 登出功能
       function logout() {
@@ -202,7 +223,7 @@
       // 密码修改功能
       document
         .getElementById("change-password-form")
-        .addEventListener("submit", (e) => {
+        .addEventListener("submit", function (e) {
           e.preventDefault();
           const currentPassword =
             document.getElementById("current-password").value;
@@ -212,7 +233,12 @@
           const csrfToken = document.getElementById("csrf-token-pw").value;
 
           if (newPassword !== confirmPassword) {
-            alert("New passwords do not match");
+            alert("新密码与确认密码不匹配");
+            return;
+          }
+
+          if (newPassword.length < 8) {
+            alert("密码长度至少为8个字符");
             return;
           }
 
@@ -225,46 +251,31 @@
             credentials: "include",
             body: JSON.stringify({ currentPassword, newPassword }),
           })
-            .then((response) => response.json())
+            .then((response) => {
+              if (!response.ok) throw new Error("Network response was not ok");
+              return response.json();
+            })
             .then((data) => {
               if (data.success) {
-                alert("Password changed successfully");
+                alert("密码修改成功，请重新登录");
                 window.location.href = "/login.html";
               } else {
-                alert(data.message || "Failed to change password");
+                alert(data.message || "密码修改失败");
               }
             })
-            .catch((error) => console.error("Error:", error));
+            .catch((error) => {
+              console.error("Error:", error);
+              alert("密码修改过程中出错");
+            });
         });
-
-      // 页面加载时获取CSRF令牌
-      window.addEventListener("load", () => {
-        // 获取CSRF令牌并填充到密码修改表单
-        fetch("/csrf-token", { credentials: "include" })
-          .then((res) => res.json())
-          .then((data) => {
-            document.getElementById("csrf-token-pw").value = data.csrfToken;
-          });
-      });
-
-      // 获取Cookie的函数
-      function getCookie(name) {
-        const value = `; ${document.cookie}`;
-        const parts = value.split(`; ${name}=`);
-        if (parts.length === 2) return parts.pop().split(";").shift();
-      }
 
       // 功能按钮的示例函数
       function viewProfile() {
-        alert("Profile view functionality will be implemented here");
+        alert("个人资料功能将在此处实现");
       }
 
       function viewOrders() {
-        alert("Order history will be displayed here");
-      }
-
-      function changePassword() {
-        window.location.href = "/change-password.html";
+        alert("订单历史将在此处显示");
       }
 
       function contactSupport() {
