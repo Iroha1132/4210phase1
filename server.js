@@ -215,14 +215,24 @@ app.get('/csrf-token', (req, res) => {
   res.json({ csrfToken: req.csrfToken() });
 });
 
-// 添加获取用户信息的路由
-app.get('/user-info', authenticateAdmin, (req, res) => {
-  const sql = 'SELECT email FROM users WHERE userid = ?';
-  db.query(sql, [req.userId], (err, results) => {
-    if (err || !results.length) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    res.json({ email: results[0].email });
+// 修改后的/user-info路由
+app.get('/user-info', (req, res) => {
+  const token = req.cookies.auth_token;
+  if (!token) return res.status(401).json({ authenticated: false });
+
+  jwt.verify(token, 'secret_key', (err, decoded) => {
+    if (err) return res.status(401).json({ authenticated: false });
+    
+    const sql = 'SELECT email, admin_flag FROM users WHERE userid = ?';
+    db.query(sql, [decoded.userId], (err, results) => {
+      if (err || !results.length) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      res.json({ 
+        email: results[0].email,
+        isAdmin: results[0].admin_flag === 1 
+      });
+    });
   });
 });
 
