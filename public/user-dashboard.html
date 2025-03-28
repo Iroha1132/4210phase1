@@ -179,6 +179,10 @@
               document.getElementById("username").textContent =
                 data.email.split("@")[0];
               document.getElementById("user-email").textContent = data.email;
+
+              // 新增：动态设置账户类型
+              const accountType = data.isAdmin ? "Admin User" : "Standard User";
+              document.getElementById("account-type").textContent = accountType;
             }
           })
           .catch((error) => {
