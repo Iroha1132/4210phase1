@@ -84,9 +84,23 @@ const authenticateAdmin = (req, res, next) => {
   });
 };
 
-// Routes
-app.get("/check-auth", authenticateAdmin, (req, res) => {
-  res.json({ authenticated: true });
+// 修改后的/check-auth路由 - 适用于所有认证用户
+app.get("/check-auth", (req, res) => {
+  const token = req.cookies.auth_token;
+  if (!token) return res.status(401).json({ authenticated: false });
+
+  jwt.verify(token, 'secret_key', (err, decoded) => {
+    if (err) return res.status(401).json({ authenticated: false });
+    
+    // 检查用户是否存在
+    const sql = 'SELECT userid FROM users WHERE userid = ?';
+    db.query(sql, [decoded.userId], (err, results) => {
+      if (err || !results.length) {
+        return res.status(401).json({ authenticated: false });
+      }
+      res.json({ authenticated: true });
+    });
+  });
 });
 
 // User Authentication
