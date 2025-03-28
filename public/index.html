@@ -249,18 +249,26 @@
           });
       }
 
-      // 修改用户状态点击事件
+      // 替换原有的点击事件处理
       document.getElementById("user-status").addEventListener("click", (e) => {
         // 防止点击管理员链接时触发
         if (e.target.tagName === "A") return;
 
-        fetch("/check-auth", {
+        fetch("/user-info", {
           credentials: "include",
         })
           .then((response) => {
             if (response.ok) {
+              return response.json();
+            }
+            throw new Error("Not logged in");
+          })
+          .then((data) => {
+            if (data.email) {
+              // 已登录用户跳转到仪表盘
               window.location.href = "/user-dashboard.html";
             } else {
+              // 未登录用户跳转到登录页
               window.location.href = "/login.html";
             }
           })
