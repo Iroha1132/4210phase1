@@ -132,29 +132,36 @@ app.post("/logout", (req, res) => {
 });
 
 // Password Change
-app.post("/change-password", authenticateAdmin, (req, res) => {
-  const { currentPassword, newPassword } = req.body;
-  const userId = req.userId;
+app.post("/change-password", (req, res) => {
+  const token = req.cookies.auth_token;
+  if (!token) return res.status(401).json({ authenticated: false });
 
-  const sql = "SELECT password FROM users WHERE userid = ?";
-  db.query(sql, [userId], (err, results) => {
-    if (err) throw err;
-    if (results.length > 0) {
-      const user = results[0];
-      if (bcrypt.compareSync(currentPassword, user.password)) {
-        const hashedPassword = bcrypt.hashSync(newPassword, 10);
-        const updateSql = "UPDATE users SET password = ? WHERE userid = ?";
-        db.query(updateSql, [hashedPassword, userId], (err, result) => {
-          if (err) throw err;
-          res.clearCookie("auth_token");
-          res.json({ success: true });
-        });
+  jwt.verify(token, 'secret_key', (err, decoded) => {
+    if (err) return res.status(401).json({ authenticated: false });
+    
+    const { currentPassword, newPassword } = req.body;
+    const userId = decoded.userId;
+
+    const sql = "SELECT password FROM users WHERE userid = ?";
+    db.query(sql, [userId], (err, results) => {
+      if (err) throw err;
+      if (results.length > 0) {
+        const user = results[0];
+        if (bcrypt.compareSync(currentPassword, user.password)) {
+          const hashedPassword = bcrypt.hashSync(newPassword, 10);
+          const updateSql = "UPDATE users SET password = ? WHERE userid = ?";
+          db.query(updateSql, [hashedPassword, userId], (err, result) => {
+            if (err) throw err;
+            res.clearCookie("auth_token");
+            res.json({ success: true });
+          });
+        } else {
+          res.json({ success: false, message: "Current password is incorrect" });
+        }
       } else {
-        res.json({ success: false, message: "Current password is incorrect" });
+        res.json({ success: false, message: "User not found" });
       }
-    } else {
-      res.json({ success: false, message: "User not found" });
-    }
+    });
   });
 });
 
