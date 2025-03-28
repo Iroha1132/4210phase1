@@ -14,11 +14,31 @@ const cookieParser = require("cookie-parser");
 const helmet = require("helmet");
 const https = require("https");
 const fs = require("fs");
+const crypto = require('crypto');
 
 const upload = multer({ dest: "uploads/" });
 
 // Security Middleware
-app.use(helmet());
+// 替换现有的helmet配置
+app.use(
+  helmet.contentSecurityPolicy({
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      imgSrc: [
+        "'self'",
+        "data:",
+        "https://ierg4210.eastasia.cloudapp.azure.com",
+      ],
+      connectSrc: ["'self'"],
+      frameSrc: ["'none'"],
+      objectSrc: ["'none'"],
+    },
+  })
+);
+
 app.use(
   cors({
     origin: true,
@@ -28,12 +48,12 @@ app.use(
 app.use(cookieParser());
 const csrfProtection = csrf({
   cookie: {
-    key: '_csrf',          // Cookie 名称
-    httpOnly: true,        // 仅 HTTP 可访问（防止 XSS）
-    secure: process.env.NODE_ENV === 'production', // 仅在 HTTPS 环境下启用
-    sameSite: 'strict',    // 严格限制同站点访问
-    maxAge: 86400          // Cookie 有效期（秒，这里是 24 小时）
-  }
+    key: "_csrf", // Cookie 名称
+    httpOnly: true, // 仅 HTTP 可访问（防止 XSS）
+    secure: process.env.NODE_ENV === "production", // 仅在 HTTPS 环境下启用
+    sameSite: "strict", // 严格限制同站点访问
+    maxAge: 86400, // Cookie 有效期（秒，这里是 24 小时）
+  },
 });
 
 // 应用 CSRF 中间件
@@ -69,14 +89,14 @@ const authenticateAdmin = (req, res, next) => {
   const token = req.cookies.auth_token;
   if (!token) return res.status(401).json({ authenticated: false });
 
-  jwt.verify(token, 'secret_key', (err, decoded) => {
+  jwt.verify(token, "secret_key", (err, decoded) => {
     if (err) return res.status(401).json({ authenticated: false });
-    
+
     // 新增管理员权限检查
-    const sql = 'SELECT admin_flag FROM users WHERE userid = ?';
+    const sql = "SELECT admin_flag FROM users WHERE userid = ?";
     db.query(sql, [decoded.userId], (err, results) => {
       if (err || !results.length || !results[0].admin_flag) {
-        return res.status(403).json({ error: 'Admin access required' });
+        return res.status(403).json({ error: "Admin access required" });
       }
       req.userId = decoded.userId;
       next();
@@ -89,11 +109,11 @@ app.get("/check-auth", (req, res) => {
   const token = req.cookies.auth_token;
   if (!token) return res.status(401).json({ authenticated: false });
 
-  jwt.verify(token, 'secret_key', (err, decoded) => {
+  jwt.verify(token, "secret_key", (err, decoded) => {
     if (err) return res.status(401).json({ authenticated: false });
-    
+
     // 检查用户是否存在
-    const sql = 'SELECT userid FROM users WHERE userid = ?';
+    const sql = "SELECT userid FROM users WHERE userid = ?";
     db.query(sql, [decoded.userId], (err, results) => {
       if (err || !results.length) {
         return res.status(401).json({ authenticated: false });
@@ -104,39 +124,49 @@ app.get("/check-auth", (req, res) => {
 });
 
 // User Authentication
-// 修改/login路由，添加用户类型判断
 app.post("/login", (req, res) => {
   const { email, password } = req.body;
   const sql = "SELECT * FROM users WHERE email = ?";
+  
   db.query(sql, [xss(email)], (err, results) => {
-    if (err) throw err;
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ success: false, message: "服务器错误" });
+    }
+
     if (results.length > 0) {
       const user = results[0];
       if (bcrypt.compareSync(password, user.password)) {
-        const token = jwt.sign({ userId: user.userid }, "secret_key", {
-          expiresIn: "2d",
-        });
+        // 生成包含随机会话ID的新令牌
+        const sessionId = crypto.randomBytes(16).toString('hex');
+        const token = jwt.sign({ 
+          userId: user.userid,
+          sessionId: sessionId,  // 关键防御点
+          loginSeq: crypto.randomBytes(8).toString('hex') // 登录序列号
+        }, "secret_key", { expiresIn: "2d" });
+
+        // 设置新Cookie（使旧会话失效）
         res.cookie("auth_token", token, {
           httpOnly: true,
           secure: true,
           maxAge: 172800000,
-          sameSite: "strict",
+          sameSite: "strict"
         });
-        res.cookie("XSRF-TOKEN", req.csrfToken(), {
-          httpOnly: false,
-          secure: process.env.NODE_ENV === "production",
-          sameSite: "strict",
-        });
-        
-        // 根据用户类型返回不同的redirect路径
-        return res.json({ 
+
+        // 返回响应
+        return res.json({
           success: true,
           isAdmin: user.admin_flag === 1,
           redirect: user.admin_flag === 1 ? "/admin.html" : "/user-dashboard.html"
         });
       }
     }
-    res.json({ success: false });
+    
+    // 统一错误消息
+    res.status(401).json({ 
+      success: false, 
+      message: "邮箱或密码错误" 
+    });
   });
 });
 
@@ -150,9 +180,9 @@ app.post("/change-password", (req, res) => {
   const token = req.cookies.auth_token;
   if (!token) return res.status(401).json({ authenticated: false });
 
-  jwt.verify(token, 'secret_key', (err, decoded) => {
+  jwt.verify(token, "secret_key", (err, decoded) => {
     if (err) return res.status(401).json({ authenticated: false });
-    
+
     const { currentPassword, newPassword } = req.body;
     const userId = decoded.userId;
 
@@ -170,7 +200,10 @@ app.post("/change-password", (req, res) => {
             res.json({ success: true });
           });
         } else {
-          res.json({ success: false, message: "Current password is incorrect" });
+          res.json({
+            success: false,
+            message: "Current password is incorrect",
+          });
         }
       } else {
         res.json({ success: false, message: "User not found" });
@@ -225,33 +258,33 @@ app.get("/products/:catid", (req, res) => {
 });
 
 // 提供 CSRF Token 的路由（供前端获取）
-app.get('/csrf-token', (req, res) => {
+app.get("/csrf-token", (req, res) => {
   res.json({ csrfToken: req.csrfToken() });
 });
 
 // 修改后的/user-info路由
-app.get('/user-info', (req, res) => {
+app.get("/user-info", (req, res) => {
   const token = req.cookies.auth_token;
   if (!token) return res.status(401).json({ authenticated: false });
 
-  jwt.verify(token, 'secret_key', (err, decoded) => {
+  jwt.verify(token, "secret_key", (err, decoded) => {
     if (err) return res.status(401).json({ authenticated: false });
-    
-    const sql = 'SELECT email, admin_flag FROM users WHERE userid = ?';
+
+    const sql = "SELECT email, admin_flag FROM users WHERE userid = ?";
     db.query(sql, [decoded.userId], (err, results) => {
       if (err || !results.length) {
-        return res.status(404).json({ error: 'User not found' });
+        return res.status(404).json({ error: "User not found" });
       }
-      res.json({ 
+      res.json({
         email: results[0].email,
-        isAdmin: results[0].admin_flag === 1 
+        isAdmin: results[0].admin_flag === 1,
       });
     });
   });
 });
 
-app.get('/check-admin', authenticateAdmin, (req, res) => {
-  const sql = 'SELECT admin_flag FROM users WHERE userid = ?';
+app.get("/check-admin", authenticateAdmin, (req, res) => {
+  const sql = "SELECT admin_flag FROM users WHERE userid = ?";
   db.query(sql, [req.userId], (err, results) => {
     if (err || !results.length) {
       return res.status(403).json({ isAdmin: false });
@@ -261,49 +294,54 @@ app.get('/check-admin', authenticateAdmin, (req, res) => {
 });
 
 // Add Product with XSS protection
-app.post("/add-product", upload.single("image"), authenticateAdmin, (req, res) => {
-  const { catid, name, price, description } = req.body;
-  const sanitizedName = xss(name);
-  const sanitizedDescription = xss(description);
-  const imagePath = req.file ? req.file.path : null;
+app.post(
+  "/add-product",
+  upload.single("image"),
+  authenticateAdmin,
+  (req, res) => {
+    const { catid, name, price, description } = req.body;
+    const sanitizedName = xss(name);
+    const sanitizedDescription = xss(description);
+    const imagePath = req.file ? req.file.path : null;
 
-  if (imagePath) {
-    sharp(imagePath)
-      .resize(200, 200)
-      .toFile(`uploads/thumbnail-${req.file.filename}`, (err) => {
-        if (err) throw err;
-        const thumbnailPath = `uploads/thumbnail-${req.file.filename}`;
-        const sql =
-          "INSERT INTO products (catid, name, price, description, image, thumbnail) VALUES (?, ?, ?, ?, ?, ?)";
-        db.query(
-          sql,
-          [
-            xss(catid),
-            sanitizedName,
-            xss(price),
-            sanitizedDescription,
-            imagePath,
-            thumbnailPath,
-          ],
-          (err, result) => {
-            if (err) throw err;
-            res.send("Product added");
-          }
-        );
-      });
-  } else {
-    const sql =
-      "INSERT INTO products (catid, name, price, description) VALUES (?, ?, ?, ?)";
-    db.query(
-      sql,
-      [xss(catid), sanitizedName, xss(price), sanitizedDescription],
-      (err, result) => {
-        if (err) throw err;
-        res.send("Product added");
-      }
-    );
+    if (imagePath) {
+      sharp(imagePath)
+        .resize(200, 200)
+        .toFile(`uploads/thumbnail-${req.file.filename}`, (err) => {
+          if (err) throw err;
+          const thumbnailPath = `uploads/thumbnail-${req.file.filename}`;
+          const sql =
+            "INSERT INTO products (catid, name, price, description, image, thumbnail) VALUES (?, ?, ?, ?, ?, ?)";
+          db.query(
+            sql,
+            [
+              xss(catid),
+              sanitizedName,
+              xss(price),
+              sanitizedDescription,
+              imagePath,
+              thumbnailPath,
+            ],
+            (err, result) => {
+              if (err) throw err;
+              res.send("Product added");
+            }
+          );
+        });
+    } else {
+      const sql =
+        "INSERT INTO products (catid, name, price, description) VALUES (?, ?, ?, ?)";
+      db.query(
+        sql,
+        [xss(catid), sanitizedName, xss(price), sanitizedDescription],
+        (err, result) => {
+          if (err) throw err;
+          res.send("Product added");
+        }
+      );
+    }
   }
-});
+);
 
 // Update Product with XSS protection
 app.put(
