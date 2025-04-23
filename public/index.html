@@ -1,4 +1,43 @@
-<!DOCTYPE html>
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -28,10 +67,9 @@
           <li><a href="#">Category 2</a></li>
         </ul>
       </nav>
-      <!-- 添加用户状态显示 -->
       <div id="user-status" class="user-status">
         <span id="user-email">Guest</span>
-      </div>
+      </751>
     </header>
 
     <main>
@@ -39,16 +77,13 @@
         <p>Home</p>
       </section>
 
-      <!-- 类别选择下拉菜单 -->
       <section class="category-select">
         <label for="category-select">Select Category:</label>
         <select id="category-select">
           <option value="">-- Select a Category --</option>
-          <!-- 动态加载类别 -->
         </select>
       </section>
 
-      <!-- 产品列表 -->
       <section class="product-list" id="product-list">
         <div class="product">
           <a href="product1.html">
@@ -112,28 +147,22 @@
         </div>
       </section>
 
-      <!-- 购物车 -->
       <section class="shopping-list">
         <h2>Shopping List</h2>
-        <div class="cart-items">
-          <div class="cart-item">
-            <input type="number" value="1" min="1" />
-            <span>Product 1 - $19.99</span>
+        <form id="paypal-form" action="https://www.sandbox.paypal.com/cgi-bin/webscr" method="post">
+          <input type="hidden" name="cmd" value="_cart">
+          <input type="hidden" name="upload" value="1">
+          <input type="hidden" name="business" value="sb-zwa7g40564566@business.example.com">
+          <input type="hidden" name="charset" value="utf-8">
+          <input type="hidden" name="currency_code" value="USD">
+          <input type="hidden" name="invoice" id="invoice">
+          <input type="hidden" name="custom" id="custom">
+          <input type="hidden" id="csrf-token" name="_csrf">
+          <div class="cart-items" id="cart-items">
+            <!-- 动态生成购物车项目 -->
           </div>
-          <div class="cart-item">
-            <input type="number" value="1" min="1" />
-            <span>Product 2 - $29.99</span>
-          </div>
-          <div class="cart-item">
-            <input type="number" value="1" min="1" />
-            <span>Product 3 - $39.99</span>
-          </div>
-          <div class="cart-item">
-            <input type="number" value="1" min="1" />
-            <span>Product 4 - $49.99</span>
-          </div>
-        </div>
-        <button class="checkout">Checkout</button>
+          <button type="submit" class="checkout">Checkout with PayPal</button>
+        </form>
       </section>
     </main>
 
@@ -142,6 +171,19 @@
     </footer>
 
     <script>
+      function getCookie(name) {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop().split(";").shift();
+      }
+
+      // 获取 CSRF 令牌
+      fetch("/csrf-token", { credentials: "include" })
+        .then((response) => response.json())
+        .then((data) => {
+          document.getElementById("csrf-token").value = data.csrfToken;
+        });
+
       // 动态加载类别
       fetch("https://ierg4210.eastasia.cloudapp.azure.com/categories", {
         credentials: "include",
@@ -167,23 +209,22 @@
               .then((response) => response.json())
               .then((products) => {
                 const productList = document.getElementById("product-list");
-                productList.innerHTML = ""; // 清空当前产品列表
+                productList.innerHTML = "";
                 products.forEach((product) => {
                   const productDiv = document.createElement("div");
                   productDiv.className = "product";
                   productDiv.innerHTML = `
-                                <a href="product${product.pid}.html">
-                                    <img src="images/product${product.pid}.jpg" alt="${product.name}">
-                                    <h3>${product.name}</h3>
-                                    <p>$${product.price}</p>
-                                </a>
-                                <button class="add-to-cart" data-pid="${product.pid}" data-name="${product.name}" data-price="${product.price}">Add to Cart</button>
-                            `;
+                    <a href="product${product.pid}.html">
+                        <img src="images/product${product.pid}.jpg" alt="${product.name}">
+                        <h3>${product.name}</h3>
+                        <p>$${product.price}</p>
+                    </a>
+                    <button class="add-to-cart" data-pid="${product.pid}" data-name="${product.name}" data-price="${product.price}">Add to Cart</button>
+                  `;
                   productList.appendChild(productDiv);
                 });
               });
           } else {
-            // 如果没有选择类别，清空产品列表
             const productList = document.getElementById("product-list");
             productList.innerHTML = "";
           }
@@ -215,7 +256,102 @@
         }
       });
 
-      // 替换原有的checkUserStatus函数
+      // 更新购物车 UI
+      function updateCartUI() {
+        const cart = JSON.parse(localStorage.getItem("cart")) || [];
+        const cartItems = document.getElementById("cart-items");
+        cartItems.innerHTML = "";
+
+        let totalAmount = 0;
+        cart.forEach((item, index) => {
+          totalAmount += item.price * item.quantity;
+          const cartItem = document.createElement("div");
+          cartItem.className = "cart-item";
+          cartItem.innerHTML = `
+            <input type="hidden" name="item_name_${index + 1}" value="${item.name}">
+            <input type="hidden" name="item_number_${index + 1}" value="${item.pid}">
+            <input type="hidden" name="quantity_${index + 1}" value="${item.quantity}">
+            <input type="hidden" name="amount_${index + 1}" value="${item.price}">
+            <input type="number" value="${item.quantity}" min="1" data-pid="${item.pid}">
+            <span>${item.name} - $${item.price}</span>
+            <button class="remove-item" data-pid="${item.pid}">Remove</button>
+          `;
+          cartItems.appendChild(cartItem);
+        });
+
+        const totalElement = document.createElement("div");
+        totalElement.className = "total";
+        totalElement.innerHTML = `Total: $${totalAmount.toFixed(2)}`;
+        cartItems.appendChild(totalElement);
+      }
+
+      // 删除购物车中的商品
+      document.addEventListener("click", (event) => {
+        if (event.target.classList.contains("remove-item")) {
+          const pid = event.target.getAttribute("data-pid");
+          let cart = JSON.parse(localStorage.getItem("cart")) || [];
+          cart = cart.filter((item) => item.pid !== pid);
+          localStorage.setItem("cart", JSON.stringify(cart));
+          updateCartUI();
+        }
+      });
+
+      // 更新购物车数量
+      document.addEventListener("change", (event) => {
+        if (event.target.type === "number" && event.target.parentElement.classList.contains("cart-item")) {
+          const pid = event.target.getAttribute("data-pid");
+          const newQuantity = parseInt(event.target.value);
+          let cart = JSON.parse(localStorage.getItem("cart")) || [];
+          const item = cart.find((item) => item.pid === pid);
+          if (item && newQuantity > 0) {
+            item.quantity = newQuantity;
+            localStorage.setItem("cart", JSON.stringify(cart));
+            updateCartUI();
+          }
+        }
+      });
+
+      // 结账按钮点击事件
+      document.getElementById("paypal-form").addEventListener("submit", (e) => {
+        e.preventDefault();
+        const cart = JSON.parse(localStorage.getItem("cart")) || [];
+        if (cart.length === 0) {
+          alert("Your cart is empty!");
+          return;
+        }
+
+        const items = cart.map((item) => ({
+          pid: item.pid,
+          quantity: item.quantity,
+        }));
+
+        fetch("/validate-order", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": document.getElementById("csrf-token").value,
+          },
+          credentials: "include",
+          body: JSON.stringify({ items }),
+        })
+          .then((response) => response.json())
+          .then((data) => {
+            if (data.success) {
+              document.getElementById("invoice").value = data.orderId;
+              document.getElementById("custom").value = data.digest;
+              localStorage.removeItem("cart");
+              updateCartUI();
+              document.getElementById("paypal-form").submit();
+            } else {
+              alert("Order validation failed: " + data.message);
+            }
+          })
+          .catch((error) => {
+            console.error("Error:", error);
+            alert("Error during order validation");
+          });
+      });
+
       function checkUserStatus() {
         fetch("/user-info", {
           credentials: "include",
@@ -229,10 +365,7 @@
           .then((data) => {
             const userStatusElement = document.getElementById("user-status");
             if (data.email) {
-              // 显示用户邮箱
               document.getElementById("user-email").textContent = data.email;
-
-              // 如果是管理员，添加管理员链接
               if (data.isAdmin) {
                 const adminLink = document.createElement("a");
                 adminLink.href = "/admin.html";
@@ -249,11 +382,8 @@
           });
       }
 
-      // 替换原有的点击事件处理
       document.getElementById("user-status").addEventListener("click", (e) => {
-        // 防止点击管理员链接时触发
         if (e.target.tagName === "A") return;
-
         fetch("/user-info", {
           credentials: "include",
         })
@@ -265,10 +395,8 @@
           })
           .then((data) => {
             if (data.email) {
-              // 已登录用户跳转到仪表盘
               window.location.href = "/user-dashboard.html";
             } else {
-              // 未登录用户跳转到登录页
               window.location.href = "/login.html";
             }
           })
@@ -277,35 +405,11 @@
           });
       });
 
-      // 更新购物车 UI
-      function updateCartUI() {
-        const cart = JSON.parse(localStorage.getItem("cart")) || [];
-        const cartItems = document.querySelector(".cart-items");
-        cartItems.innerHTML = "";
-
-        let totalAmount = 0;
-        cart.forEach((item) => {
-          totalAmount += item.price * item.quantity;
-          const cartItem = document.createElement("div");
-          cartItem.className = "cart-item";
-          cartItem.innerHTML = `
-                    <input type="number" value="${item.quantity}" min="1">
-                    <span>${item.name} - $${item.price}</span>
-                `;
-          cartItems.appendChild(cartItem);
-        });
-
-        const totalElement = document.createElement("div");
-        totalElement.className = "total";
-        totalElement.innerHTML = `Total: $${totalAmount.toFixed(2)}`;
-        cartItems.appendChild(totalElement);
-      }
-
-      // 页面加载时恢复购物车
       window.addEventListener("load", () => {
         checkUserStatus();
         updateCartUI();
       });
     </script>
+    <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9346a4737a0abcf6',t:'MTc0NTM0MDg1OS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script>
   </body>
 </html>
