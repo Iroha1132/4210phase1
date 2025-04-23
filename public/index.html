@@ -238,17 +238,20 @@
 
     // 更新购物车 UI
     function updateCartUI() {
-      const cart = JSON.parse(localStorage.getItem("cart")) || [];
-      const cartItems = document.getElementById("cart-items");
-      cartItems.innerHTML = "";
-
-      let totalAmount = 0;
-      cart.forEach((item, index) => {
-        const price = parseFloat(item.price).toFixed(2); // 确保价格是数字格式，如 "19.99"
-        totalAmount += price * item.quantity;
-        const cartItem = document.createElement("div");
-        cartItem.className = "cart-item";
-        cartItem.innerHTML = `
+  const cart = JSON.parse(localStorage.getItem("cart")) || [];
+  const cartItems = document.getElementById("cart-items");
+  cartItems.innerHTML = "";
+  let totalAmount = 0;
+  cart.forEach((item, index) => {
+    if (!item.price || isNaN(parseFloat(item.price))) {
+      console.error(`Invalid price for item ${item.name}: ${item.price}`);
+      return; // 跳过无效项目
+    }
+    const price = parseFloat(item.price).toFixed(2);
+    totalAmount += price * item.quantity;
+    const cartItem = document.createElement("div");
+    cartItem.className = "cart-item";
+    cartItem.innerHTML = `
       <input type="hidden" name="item_name_${index + 1}" value="${item.name}">
       <input type="hidden" name="item_number_${index + 1}" value="${item.pid}">
       <input type="hidden" name="quantity_${index + 1}" value="${item.quantity}">
@@ -257,14 +260,13 @@
       <span>${item.name} - $${price}</span>
       <button class="remove-item" data-pid="${item.pid}">Remove</button>
     `;
-        cartItems.appendChild(cartItem);
-      });
-
-      const totalElement = document.createElement("div");
-      totalElement.className = "total";
-      totalElement.innerHTML = `Total: $${totalAmount.toFixed(2)}`;
-      cartItems.appendChild(totalElement);
-    }
+    cartItems.appendChild(cartItem);
+  });
+  const totalElement = document.createElement("div");
+  totalElement.className = "total";
+  totalElement.innerHTML = `Total: $${totalAmount.toFixed(2)}`;
+  cartItems.appendChild(totalElement);
+}
 
     // 删除购物车中的商品
     document.addEventListener("click", (event) => {
@@ -294,19 +296,19 @@
 
     // 结账按钮点击事件
     document.getElementById("paypal-form").addEventListener("submit", (e) => {
-  e.preventDefault();
-  const cart = JSON.parse(localStorage.getItem("cart")) || [];
-  if (cart.length === 0) {
-    alert("Your cart is empty!");
-    return;
-  }
+      e.preventDefault();
+      const cart = JSON.parse(localStorage.getItem("cart")) || [];
+      if (cart.length === 0) {
+        alert("Your cart is empty!");
+        return;
+      }
 
-  updateCartUI(); // 在提交前重新渲染购物车
+      updateCartUI(); // 在提交前重新渲染购物车
 
-  const items = cart.map((item) => ({
-    pid: item.pid,
-    quantity: item.quantity,
-  }));
+      const items = cart.map((item) => ({
+        pid: item.pid,
+        quantity: item.quantity,
+      }));
 
       fetch("/validate-order", {
         method: "POST",
