@@ -185,9 +185,7 @@
         });
 
       // 动态加载类别
-      fetch("https://ierg4210.eastasia.cloudapp.azure.com/categories", {
-        credentials: "include",
-      })
+      fetch("/categories", { credentials: "include" })
         .then((response) => response.json())
         .then((categories) => {
           const categorySelect = document.getElementById("category-select");
