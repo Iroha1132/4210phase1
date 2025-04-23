@@ -88,7 +88,7 @@ db.connect((err) => {
       orderId INT AUTO_INCREMENT PRIMARY KEY,
       userId INT NULL,
       username VARCHAR(255) NULL,
-      currency VARCHAR(3) DEFAULT 'USD',
+      currency VARCHAR(3) DEFAULT 'HKD',
       totalPrice DECIMAL(10,2) NOT NULL,
       digest VARCHAR(255) NOT NULL,
       status ENUM('pending', 'completed', 'failed') DEFAULT 'pending',
@@ -522,7 +522,7 @@ app.post("/validate-order", csrfProtection, (req, res) => {
     // 生成摘要
     const salt = crypto.randomBytes(16).toString("hex");
     const dataToHash = [
-      "USD",
+      "HKD",
       "sb-zwa7g40564566@business.example.com",
       salt,
       ...items.map((item) => `${item.pid}:${item.quantity}:${prices[item.pid]}`),
