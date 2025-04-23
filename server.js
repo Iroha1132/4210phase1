@@ -14,12 +14,18 @@ const cookieParser = require("cookie-parser");
 const helmet = require("helmet");
 const https = require("https");
 const fs = require("fs");
-const crypto = require('crypto');
+const crypto = require("crypto");
+const paypal = require("paypal-rest-sdk"); // 新增 PayPal SDK
 
 const upload = multer({ dest: "uploads/" });
 
-// Security Middleware
-// 替换现有的helmet配置
+// 配置 PayPal SDK
+paypal.configure({
+  mode: "sandbox", // 使用沙盒环境，生产环境改为 "live"
+  client_id: "AV6sDnhRtyl78RIXw-yeIwWM7DqUTYDvlUSP5l82fY9ZyIqubZxnahfJJ0uMPCuUOtLCA0dyLCw_gxPq", // 替换为你的 PayPal Client ID
+  client_secret: "EOOXF8GeF25ErUzFKC0Pz6BMVxgBEnFbrLm9aVoTMu0XC3iaoPgYUPddAZhhdgBM0qpyhybRl793e7QJ", // 替换为你的 PayPal Client Secret
+});
+
 app.use(
   helmet.contentSecurityPolicy({
     directives: {
@@ -48,15 +54,14 @@ app.use(
 app.use(cookieParser());
 const csrfProtection = csrf({
   cookie: {
-    key: "_csrf", // Cookie 名称
-    httpOnly: true, // 仅 HTTP 可访问（防止 XSS）
-    secure: process.env.NODE_ENV === "production", // 仅在 HTTPS 环境下启用
-    sameSite: "strict", // 严格限制同站点访问
-    maxAge: 86400, // Cookie 有效期（秒，这里是 24 小时）
+    key: "_csrf",
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+    maxAge: 86400,
   },
 });
 
-// 应用 CSRF 中间件
 app.use(csrfProtection);
 app.use((req, res, next) => {
   res.setHeader(
@@ -66,7 +71,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// Database connection
 const db = mysql.createConnection({
   host: "localhost",
   user: "root",
@@ -77,14 +81,44 @@ const db = mysql.createConnection({
 db.connect((err) => {
   if (err) throw err;
   console.log("MySQL connected");
+
+  // 创建 orders 表
+  const createOrdersTable = `
+    CREATE TABLE IF NOT EXISTS orders (
+      orderId INT AUTO_INCREMENT PRIMARY KEY,
+      userId INT NULL,
+      username VARCHAR(255) NULL,
+      currency VARCHAR(3) DEFAULT 'USD',
+      totalPrice DECIMAL(10,2) NOT NULL,
+      digest VARCHAR(255) NOT NULL,
+      status ENUM('pending', 'completed', 'failed') DEFAULT 'pending',
+      createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (userId) REFERENCES users(userid)
+    )`;
+  db.query(createOrdersTable, (err) => {
+    if (err) throw err;
+  });
+
+  // 创建 order_items 表
+  const createOrderItemsTable = `
+    CREATE TABLE IF NOT EXISTS order_items (
+      itemId INT AUTO_INCREMENT PRIMARY KEY,
+      orderId INT NOT NULL,
+      pid INT NOT NULL,
+      quantity INT NOT NULL,
+      price DECIMAL(10,2) NOT NULL,
+      FOREIGN KEY (orderId) REFERENCES orders(orderId),
+      FOREIGN KEY (pid) REFERENCES products(pid)
+    )`;
+  db.query(createOrderItemsTable, (err) => {
+    if (err) throw err;
+  });
 });
 
-// Middleware
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, "public")));
 
-// Authentication Middleware
 const authenticateAdmin = (req, res, next) => {
   const token = req.cookies.auth_token;
   if (!token) return res.status(401).json({ authenticated: false });
@@ -92,7 +126,6 @@ const authenticateAdmin = (req, res, next) => {
   jwt.verify(token, "secret_key", (err, decoded) => {
     if (err) return res.status(401).json({ authenticated: false });
 
-    // 新增管理员权限检查
     const sql = "SELECT admin_flag FROM users WHERE userid = ?";
     db.query(sql, [decoded.userId], (err, results) => {
       if (err || !results.length || !results[0].admin_flag) {
@@ -104,7 +137,6 @@ const authenticateAdmin = (req, res, next) => {
   });
 };
 
-// 修改后的/check-auth路由 - 适用于所有认证用户
 app.get("/check-auth", (req, res) => {
   const token = req.cookies.auth_token;
   if (!token) return res.status(401).json({ authenticated: false });
@@ -112,7 +144,6 @@ app.get("/check-auth", (req, res) => {
   jwt.verify(token, "secret_key", (err, decoded) => {
     if (err) return res.status(401).json({ authenticated: false });
 
-    // 检查用户是否存在
     const sql = "SELECT userid FROM users WHERE userid = ?";
     db.query(sql, [decoded.userId], (err, results) => {
       if (err || !results.length) {
@@ -123,7 +154,6 @@ app.get("/check-auth", (req, res) => {
   });
 });
 
-// User Authentication
 app.post("/login", (req, res) => {
   const { email, password } = req.body;
   const sql = "SELECT * FROM users WHERE email = ?";
@@ -137,15 +167,13 @@ app.post("/login", (req, res) => {
     if (results.length > 0) {
       const user = results[0];
       if (bcrypt.compareSync(password, user.password)) {
-        // 生成包含随机会话ID的新令牌
         const sessionId = crypto.randomBytes(16).toString('hex');
         const token = jwt.sign({ 
           userId: user.userid,
-          sessionId: sessionId,  // 关键防御点
-          loginSeq: crypto.randomBytes(8).toString('hex') // 登录序列号
+          sessionId: sessionId,
+          loginSeq: crypto.randomBytes(8).toString('hex')
         }, "secret_key", { expiresIn: "2d" });
 
-        // 设置新Cookie（使旧会话失效）
         res.cookie("auth_token", token, {
           httpOnly: true,
           secure: true,
@@ -153,7 +181,6 @@ app.post("/login", (req, res) => {
           sameSite: "strict"
         });
 
-        // 返回响应
         return res.json({
           success: true,
           isAdmin: user.admin_flag === 1,
@@ -162,7 +189,6 @@ app.post("/login", (req, res) => {
       }
     }
     
-    // 统一错误消息
     res.status(401).json({ 
       success: false, 
       message: "邮箱或密码错误" 
@@ -175,8 +201,7 @@ app.post("/logout", (req, res) => {
   res.json({ success: true });
 });
 
-// Password Change
-app.post("/change-password", (req, res) => {
+app.post("/change-password", csrfProtection, (req, res) => {
   const token = req.cookies.auth_token;
   if (!token) return res.status(401).json({ authenticated: false });
 
@@ -186,33 +211,53 @@ app.post("/change-password", (req, res) => {
     const { currentPassword, newPassword } = req.body;
     const userId = decoded.userId;
 
+    // Validate input
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ success: false, message: "Missing required fields" });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({ success: false, message: "New password must be at least 8 characters" });
+    }
+
+    // Fetch user from database
     const sql = "SELECT password FROM users WHERE userid = ?";
     db.query(sql, [userId], (err, results) => {
-      if (err) throw err;
-      if (results.length > 0) {
-        const user = results[0];
-        if (bcrypt.compareSync(currentPassword, user.password)) {
-          const hashedPassword = bcrypt.hashSync(newPassword, 10);
-          const updateSql = "UPDATE users SET password = ? WHERE userid = ?";
-          db.query(updateSql, [hashedPassword, userId], (err, result) => {
-            if (err) throw err;
-            res.clearCookie("auth_token");
-            res.json({ success: true });
-          });
-        } else {
-          res.json({
-            success: false,
-            message: "Current password is incorrect",
-          });
-        }
-      } else {
-        res.json({ success: false, message: "User not found" });
+      if (err) {
+        console.error("Database error:", err);
+        return res.status(500).json({ success: false, message: "Server error" });
       }
+
+      if (results.length === 0) {
+        return res.status(404).json({ success: false, message: "User not found" });
+      }
+
+      const user = results[0];
+
+      // Verify current password
+      if (!bcrypt.compareSync(currentPassword, user.password)) {
+        return res.status(401).json({ success: false, message: "Current password is incorrect" });
+      }
+
+      // Hash new password
+      const hashedPassword = bcrypt.hashSync(newPassword, 10);
+
+      // Update password in database
+      const updateSql = "UPDATE users SET password = ? WHERE userid = ?";
+      db.query(updateSql, [hashedPassword, userId], (err, result) => {
+        if (err) {
+          console.error("Database error:", err);
+          return res.status(500).json({ success: false, message: "Failed to update password" });
+        }
+
+        // Clear auth token to force re-login
+        res.clearCookie("auth_token");
+        res.json({ success: true, message: "Password changed successfully" });
+      });
     });
   });
 });
 
-// Categories
 app.get("/categories", (req, res) => {
   const sql = "SELECT * FROM categories";
   db.query(sql, (err, results) => {
@@ -230,7 +275,6 @@ app.get("/category/:catid", (req, res) => {
   });
 });
 
-// Products
 app.get("/products", (req, res) => {
   const sql = "SELECT * FROM products";
   db.query(sql, (err, results) => {
@@ -257,12 +301,10 @@ app.get("/products/:catid", (req, res) => {
   });
 });
 
-// 提供 CSRF Token 的路由（供前端获取）
 app.get("/csrf-token", (req, res) => {
   res.json({ csrfToken: req.csrfToken() });
 });
 
-// 修改后的/user-info路由
 app.get("/user-info", (req, res) => {
   const token = req.cookies.auth_token;
   if (!token) return res.status(401).json({ authenticated: false });
@@ -293,7 +335,6 @@ app.get("/check-admin", authenticateAdmin, (req, res) => {
   });
 });
 
-// Add Product with XSS protection
 app.post(
   "/add-product",
   upload.single("image"),
@@ -343,7 +384,6 @@ app.post(
   }
 );
 
-// Update Product with XSS protection
 app.put(
   "/update-product/:pid",
   upload.single("image"),
@@ -395,7 +435,6 @@ app.put(
   }
 );
 
-// Categories with XSS protection
 app.post("/add-category", authenticateAdmin, (req, res) => {
   const { name } = req.body;
   const sanitizedName = xss(name);
@@ -417,7 +456,6 @@ app.put("/update-category/:catid", authenticateAdmin, (req, res) => {
   });
 });
 
-// Delete Operations
 app.delete("/delete-product/:pid", authenticateAdmin, (req, res) => {
   const pid = xss(req.params.pid);
   const sql = "DELETE FROM products WHERE pid = ?";
@@ -436,7 +474,275 @@ app.delete("/delete-category/:catid", authenticateAdmin, (req, res) => {
   });
 });
 
-// HTTPS Server Setup
+// 订单验证路由
+app.post("/validate-order", csrfProtection, (req, res) => {
+  const { items } = req.body;
+  const token = req.cookies.auth_token;
+  let userId = null;
+  let username = "guest";
+
+  // 验证用户（如果已登录）
+  if (token) {
+    jwt.verify(token, "secret_key", (err, decoded) => {
+      if (!err) {
+        userId = decoded.userId;
+        const sql = "SELECT email FROM users WHERE userid = ?";
+        db.query(sql, [userId], (err, results) => {
+          if (!err && results.length > 0) {
+            username = results[0].email;
+          }
+        });
+      }
+    });
+  }
+
+  // 验证产品和价格
+  const pids = items.map((item) => xss(item.pid));
+  const quantities = items.map((item) => parseInt(item.quantity));
+  if (quantities.some((q) => q <= 0)) {
+    return res.json({ success: false, message: "Invalid quantity" });
+  }
+
+  const sql = "SELECT pid, price FROM products WHERE pid IN (?)";
+  db.query(sql, [pids], (err, results) => {
+    if (err || results.length !== pids.length) {
+      return res.json({ success: false, message: "Invalid products" });
+    }
+
+    const prices = {};
+    results.forEach((row) => {
+      prices[row.pid] = row.price;
+    });
+
+    let totalPrice = 0;
+    items.forEach((item) => {
+      totalPrice += prices[item.pid] * item.quantity;
+    });
+
+    // 生成摘要
+    const salt = crypto.randomBytes(16).toString("hex");
+    const dataToHash = [
+      "USD",
+      "sb-zwa7g40564566@business.example.com",
+      salt,
+      ...items.map((item) => `${item.pid}:${item.quantity}:${prices[item.pid]}`),
+      totalPrice.toFixed(2),
+    ].join("|");
+    const digest = crypto.createHash("sha256").update(dataToHash).digest("hex");
+
+    // 存储订单
+    const orderSql = "INSERT INTO orders (userId, username, totalPrice, digest, status) VALUES (?, ?, ?, ?, 'pending')";
+    db.query(orderSql, [userId, username, totalPrice, digest], (err, result) => {
+      if (err) {
+        return res.json({ success: false, message: "Order creation failed" });
+      }
+
+      const orderId = result.insertId;
+      const itemSql = "INSERT INTO order_items (orderId, pid, quantity, price) VALUES ?";
+      const itemValues = items.map((item) => [
+        orderId,
+        item.pid,
+        item.quantity,
+        prices[item.pid],
+      ]);
+
+      db.query(itemSql, [itemValues], (err) => {
+        if (err) {
+          return res.json({ success: false, message: "Order items creation failed" });
+        }
+        res.json({ success: true, orderId, digest });
+      });
+    });
+  });
+});
+
+// PayPal Webhook 路由
+app.post("/paypal-webhook", express.raw({ type: "application/json" }), async (req, res) => {
+  const webhookEvent = req.body;
+  const authAlgo = req.get("PAYPAL-AUTH-ALGO");
+  const certUrl = req.get("PAYPAL-CERT-URL");
+  const transmissionId = req.get("PAYPAL-TRANSMISSION-ID");
+  const transmissionSig = req.get("PAYPAL-TRANSMISSION-SIG");
+  const transmissionTime = req.get("PAYPAL-TRANSMISSION-TIME");
+  const webhookId = "8SF35942S85318903"; // 替换为你的 PayPal Webhook ID
+
+  // Step 1: 下载 PayPal 公钥证书
+  let certificate;
+  try {
+    certificate = await new Promise((resolve, reject) => {
+      https.get(certUrl, (res) => {
+        let data = "";
+        res.on("data", (chunk) => (data += chunk));
+        res.on("end", () => resolve(data));
+      }).on("error", reject);
+    });
+  } catch (err) {
+    console.error("Failed to download PayPal certificate:", err);
+    return res.status(400).send("Invalid certificate");
+  }
+
+  // Step 2: 构建签名验证数据
+  const payload = JSON.stringify(webhookEvent);
+  const message = `${transmissionId}|${transmissionTime}|${webhookId}|${crypto
+    .createHash("sha256")
+    .update(payload)
+    .digest("hex")}`;
+
+  // Step 3: 验证签名
+  const verifier = crypto.createVerify(authAlgo);
+  verifier.update(message);
+  verifier.end();
+
+  const isValid = verifier.verify(certificate, Buffer.from(transmissionSig, "base64"));
+
+  if (!isValid) {
+    console.error("Webhook signature verification failed");
+    return res.status(400).send("Signature verification failed");
+  }
+
+  // Step 4: 处理 Webhook 事件
+  if (webhookEvent.event_type === "CHECKOUT.ORDER.APPROVED") {
+    const orderId = webhookEvent.resource.custom_id; // 对应订单 ID
+    const paypalOrderId = webhookEvent.resource.id;
+
+    // 检查订单是否已处理
+    const checkSql = "SELECT status FROM orders WHERE orderId = ?";
+    db.query(checkSql, [orderId], (err, results) => {
+      if (err || !results.length || results[0].status !== "pending") {
+        return res.status(400).send("Order already processed or invalid");
+      }
+
+      // 获取订单详情
+      const orderSql = "SELECT * FROM orders WHERE orderId = ?";
+      db.query(orderSql, [orderId], (err, orderResults) => {
+        if (err || !orderResults.length) {
+          return res.status(400).send("Order not found");
+        }
+
+        const order = orderResults[0];
+        const itemsSql = "SELECT * FROM order_items WHERE orderId = ?";
+        db.query(itemsSql, [orderId], (err, itemResults) => {
+          if (err) {
+            return res.status(400).send("Order items not found");
+          }
+
+          // 重新生成摘要
+          const salt = order.digest.substring(0, 32); // 假设 salt 是前 32 位
+          const dataToHash = [
+            order.currency,
+            "sb-zwa7g40564566@business.example.com",
+            salt,
+            ...itemResults.map((item) => `${item.pid}:${item.quantity}:${item.price}`),
+            order.totalPrice.toFixed(2),
+          ].join("|");
+          const newDigest = crypto.createHash("sha256").update(dataToHash).digest("hex");
+
+          if (newDigest !== order.digest) {
+            return res.status(400).send("Digest validation failed");
+          }
+
+          // 更新订单状态
+          const updateSql = "UPDATE orders SET status = 'completed' WHERE orderId = ?";
+          db.query(updateSql, [orderId], (err) => {
+            if (err) {
+              return res.status(500).send("Failed to update order status");
+            }
+            res.status(200).send("Webhook processed");
+          });
+        });
+      });
+    });
+  } else {
+    res.status(200).send("Webhook event ignored");
+  }
+});
+
+// 获取用户订单
+app.get("/user-orders", (req, res) => {
+  const token = req.cookies.auth_token;
+  if (!token) return res.status(401).json({ authenticated: false });
+
+  jwt.verify(token, "secret_key", (err, decoded) => {
+    if (err) return res.status(401).json({ authenticated: false });
+
+    const sql = `
+      SELECT o.orderId, o.totalPrice, o.status, o.createdAt, oi.pid, oi.quantity, oi.price, p.name
+      FROM orders o
+      LEFT JOIN order_items oi ON o.orderId = oi.orderId
+      LEFT JOIN products p ON oi.pid = p.pid
+      WHERE o.userId = ?
+      ORDER BY o.createdAt DESC
+      LIMIT 5`;
+    db.query(sql, [decoded.userId], (err, results) => {
+      if (err) {
+        return res.status(500).json({ error: "Failed to fetch orders" });
+      }
+
+      const orders = {};
+      results.forEach((row) => {
+        if (!orders[row.orderId]) {
+          orders[row.orderId] = {
+            orderId: row.orderId,
+            totalPrice: row.totalPrice,
+            status: row.status,
+            createdAt: row.createdAt,
+            items: [],
+          };
+        }
+        if (row.pid) {
+          orders[row.orderId].items.push({
+            pid: row.pid,
+            name: row.name,
+            price: row.price,
+            quantity: row.quantity,
+          });
+        }
+      });
+
+      res.json(Object.values(orders));
+    });
+  });
+});
+
+// 获取所有订单（管理员）
+app.get("/admin-orders", authenticateAdmin, (req, res) => {
+  const sql = `
+    SELECT o.orderId, o.username, o.totalPrice, o.status, o.createdAt, oi.pid, oi.quantity, oi.price, p.name
+    FROM orders o
+    LEFT JOIN order_items oi ON o.orderId = oi.orderId
+    LEFT JOIN products p ON oi.pid = p.pid
+    ORDER BY o.createdAt DESC`;
+  db.query(sql, (err, results) => {
+    if (err) {
+      return res.status(500).json({ error: "Failed to fetch orders" });
+    }
+
+    const orders = {};
+    results.forEach((row) => {
+      if (!orders[row.orderId]) {
+        orders[row.orderId] = {
+          orderId: row.orderId,
+          username: row.username,
+          totalPrice: row.totalPrice,
+          status: row.status,
+          createdAt: row.createdAt,
+          items: [],
+        };
+      }
+      if (row.pid) {
+        orders[row.orderId].items.push({
+          pid: row.pid,
+          name: row.name,
+          price: row.price,
+          quantity: row.quantity,
+        });
+      }
+    });
+
+    res.json(Object.values(orders));
+  });
+});
+
 const options = {
   key: fs.readFileSync(
     "/etc/letsencrypt/live/ierg4210.eastasia.cloudapp.azure.com/privkey.pem"
@@ -446,7 +752,6 @@ const options = {
   ),
 };
 
-// 仅监听本地 3000 端口
-app.listen(3000, "127.0.0.1", () => {
-  console.log("Node.js running on http://localhost:3000");
+https.createServer(options, app).listen(443, () => {
+  console.log("Server running on https://ierg4210.eastasia.cloudapp.azure.com");
 });
