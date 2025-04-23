@@ -752,6 +752,6 @@ const options = {
   ),
 };
 
-https.createServer(options, app).listen(443, () => {
+https.createServer(options, app).listen(3000, () => {
   console.log("Server running on https://ierg4210.eastasia.cloudapp.azure.com");
 });
