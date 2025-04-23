@@ -752,6 +752,6 @@ const options = {
   ),
 };
 
-https.createServer(options, app).listen(3000, () => {
-  console.log("Server running on https://ierg4210.eastasia.cloudapp.azure.com");
+app.listen(3000, "127.0.0.1", () => {
+  console.log("Node.js running on http://localhost:3000");
 });
