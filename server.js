@@ -15,22 +15,20 @@ const helmet = require("helmet");
 const https = require("https");
 const fs = require("fs");
 const crypto = require("crypto");
-const paypal = require("paypal-rest-sdk"); // 新增 PayPal SDK
+const axios = require("axios"); // 新增 axios 用于 PayPal REST API
 
 const upload = multer({ dest: "uploads/" });
 
-// 配置 PayPal SDK
-paypal.configure({
-  mode: "sandbox", // 使用沙盒环境，生产环境改为 "live"
-  client_id: "AV6sDnhRtyl78RIXw-yeIwWM7DqUTYDvlUSP5l82fY9ZyIqubZxnahfJJ0uMPCuUOtLCA0dyLCw_gxPq", // 替换为你的 PayPal Client ID
-  client_secret: "EOOXF8GeF25ErUzFKC0Pz6BMVxgBEnFbrLm9aVoTMu0XC3iaoPgYUPddAZhhdgBM0qpyhybRl793e7QJ", // 替换为你的 PayPal Client Secret
-});
+// PayPal REST API 配置
+const PAYPAL_CLIENT_ID = "AV6sDnhRtyl78RIXw-yeIwWM7DqUTYDvlUSP5l82fY9ZyIqubZxnahfJJ0uMPCuUOtLCA0dyLCw_gxPq";
+const PAYPAL_CLIENT_SECRET = "EOOXF8GeF25ErUzFKC0Pz6BMVxgBEnFbrLm9aVoTMu0XC3iaoPgYUPddAZhhdgBM0qpyhybRl793e7QJ";
+const PAYPAL_API = "https://api-m.sandbox.paypal.com";
 
 app.use(
   helmet.contentSecurityPolicy({
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://www.paypal.com"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
       imgSrc: [
@@ -38,8 +36,8 @@ app.use(
         "data:",
         "https://ierg4210.eastasia.cloudapp.azure.com",
       ],
-      connectSrc: ["'self'"],
-      frameSrc: ["'none'"],
+      connectSrc: ["'self'", "https://api-m.sandbox.paypal.com"],
+      frameSrc: ["'self'", "https://www.paypal.com"],
       objectSrc: ["'none'"],
     },
   })
@@ -66,7 +64,7 @@ app.use(csrfProtection);
 app.use((req, res, next) => {
   res.setHeader(
     "Content-Security-Policy",
-    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
+    "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.paypal.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://api-m.sandbox.paypal.com; frame-src 'self' https://www.paypal.com;"
   );
   next();
 });
@@ -90,7 +88,7 @@ db.connect((err) => {
       username VARCHAR(255) NULL,
       currency VARCHAR(3) DEFAULT 'HKD',
       totalPrice DECIMAL(10,2) NOT NULL,
-      digest VARCHAR(255) NOT NULL,
+      paypalOrderId VARCHAR(255) NULL,
       status ENUM('pending', 'completed', 'failed') DEFAULT 'pending',
       createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (userId) REFERENCES users(userid)
@@ -118,6 +116,18 @@ db.connect((err) => {
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, "public")));
+
+// 获取 PayPal 访问令牌
+async function getPayPalAccessToken() {
+  const auth = Buffer.from(`${PAYPAL_CLIENT_ID}:${PAYPAL_CLIENT_SECRET}`).toString('base64');
+  const response = await axios.post(`${PAYPAL_API}/v1/oauth2/token`, 'grant_type=client_credentials', {
+    headers: {
+      'Authorization': `Basic ${auth}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+  });
+  return response.data.access_token;
+}
 
 const authenticateAdmin = (req, res, next) => {
   const token = req.cookies.auth_token;
@@ -211,7 +221,6 @@ app.post("/change-password", csrfProtection, (req, res) => {
     const { currentPassword, newPassword } = req.body;
     const userId = decoded.userId;
 
-    // Validate input
     if (!currentPassword || !newPassword) {
       return res.status(400).json({ success: false, message: "Missing required fields" });
     }
@@ -220,7 +229,6 @@ app.post("/change-password", csrfProtection, (req, res) => {
       return res.status(400).json({ success: false, message: "New password must be at least 8 characters" });
     }
 
-    // Fetch user from database
     const sql = "SELECT password FROM users WHERE userid = ?";
     db.query(sql, [userId], (err, results) => {
       if (err) {
@@ -234,15 +242,12 @@ app.post("/change-password", csrfProtection, (req, res) => {
 
       const user = results[0];
 
-      // Verify current password
       if (!bcrypt.compareSync(currentPassword, user.password)) {
         return res.status(401).json({ success: false, message: "Current password is incorrect" });
       }
 
-      // Hash new password
       const hashedPassword = bcrypt.hashSync(newPassword, 10);
 
-      // Update password in database
       const updateSql = "UPDATE users SET password = ? WHERE userid = ?";
       db.query(updateSql, [hashedPassword, userId], (err, result) => {
         if (err) {
@@ -250,7 +255,6 @@ app.post("/change-password", csrfProtection, (req, res) => {
           return res.status(500).json({ success: false, message: "Failed to update password" });
         }
 
-        // Clear auth token to force re-login
         res.clearCookie("auth_token");
         res.json({ success: true, message: "Password changed successfully" });
       });
@@ -474,42 +478,56 @@ app.delete("/delete-category/:catid", authenticateAdmin, (req, res) => {
   });
 });
 
-// 订单验证路由
-app.post("/validate-order", csrfProtection, (req, res) => {
+// 创建 PayPal 订单
+app.post("/create-paypal-order", csrfProtection, async (req, res) => {
   const { items } = req.body;
   const token = req.cookies.auth_token;
   let userId = null;
   let username = "guest";
 
   if (token) {
-    jwt.verify(token, "secret_key", (err, decoded) => {
-      if (!err) {
-        userId = decoded.userId;
-        const sql = "SELECT email FROM users WHERE userid = ?";
+    try {
+      const decoded = jwt.verify(token, "secret_key");
+      userId = decoded.userId;
+      const sql = "SELECT email FROM users WHERE userid = ?";
+      const results = await new Promise((resolve, reject) => {
         db.query(sql, [userId], (err, results) => {
-          if (!err && results.length > 0) {
-            username = results[0].email;
-          }
+          if (err) reject(err);
+          resolve(results);
         });
+      });
+      if (results.length > 0) {
+        username = results[0].email;
       }
-    });
+    } catch (err) {
+      console.error("JWT verification error:", err);
+    }
   }
 
   const pids = items.map((item) => xss(item.pid));
   const quantities = items.map((item) => parseInt(item.quantity));
   if (quantities.some((q) => q <= 0)) {
-    return res.json({ success: false, message: "Invalid quantity" });
+    return res.status(400).json({ success: false, message: "Invalid quantity" });
   }
 
-  const sql = "SELECT pid, price FROM products WHERE pid IN (?)";
-  db.query(sql, [pids], (err, results) => {
-    if (err || results.length !== pids.length) {
-      return res.json({ success: false, message: "Invalid products" });
+  try {
+    const sql = "SELECT pid, name, price FROM products WHERE pid IN (?)";
+    const results = await new Promise((resolve, reject) => {
+      db.query(sql, [pids], (err, results) => {
+        if (err) reject(err);
+        resolve(results);
+      });
+    });
+
+    if (results.length !== pids.length) {
+      return res.status(400).json({ success: false, message: "Invalid products" });
     }
 
     const prices = {};
+    const productNames = {};
     results.forEach((row) => {
       prices[row.pid] = row.price;
+      productNames[row.pid] = row.name;
     });
 
     let totalPrice = 0;
@@ -517,139 +535,106 @@ app.post("/validate-order", csrfProtection, (req, res) => {
       totalPrice += prices[item.pid] * item.quantity;
     });
 
-    const salt = crypto.randomBytes(16).toString("hex");
-    const dataToHash = [
-      "HKD",
-      "sb-zwa7g40564566@business.example.com",
-      salt,
-      ...items.map((item) => `${item.pid}:${item.quantity}:${prices[item.pid]}`),
-      totalPrice.toFixed(2),
-    ].join("|");
-    const digest = crypto.createHash("sha256").update(dataToHash).digest("hex");
-
-    const orderSql = "INSERT INTO orders (userId, username, totalPrice, digest, status) VALUES (?, ?, ?, ?, 'pending')";
-    db.query(orderSql, [userId, username, totalPrice, digest], (err, result) => {
-      if (err) {
-        return res.json({ success: false, message: "Order creation failed" });
-      }
-
-      const orderId = result.insertId;
-      const itemSql = "INSERT INTO order_items (orderId, pid, quantity, price) VALUES ?";
-      const itemValues = items.map((item) => [
-        orderId,
-        item.pid,
-        item.quantity,
-        prices[item.pid],
-      ]);
-
-      db.query(itemSql, [itemValues], (err) => {
-        if (err) {
-          return res.json({ success: false, message: "Order items creation failed" });
-        }
-        res.json({ success: true, orderId, digest, totalPrice: totalPrice.toFixed(2) });
+    // 创建本地订单
+    const orderSql = "INSERT INTO orders (userId, username, totalPrice, status) VALUES (?, ?, ?, 'pending')";
+    const orderResult = await new Promise((resolve, reject) => {
+      db.query(orderSql, [userId, username, totalPrice], (err, result) => {
+        if (err) reject(err);
+        resolve(result);
       });
     });
-  });
+
+    const orderId = orderResult.insertId;
+    const itemSql = "INSERT INTO order_items (orderId, pid, quantity, price) VALUES ?";
+    const itemValues = items.map((item) => [
+      orderId,
+      item.pid,
+      item.quantity,
+      prices[item.pid],
+    ]);
+
+    await new Promise((resolve, reject) => {
+      db.query(itemSql, [itemValues], (err) => {
+        if (err) reject(err);
+        resolve();
+      });
+    });
+
+    // 创建 PayPal 订单
+    const accessToken = await getPayPalAccessToken();
+    const paypalResponse = await axios.post(`${PAYPAL_API}/v2/checkout/orders`, {
+      intent: "CAPTURE",
+      purchase_units: [{
+        amount: {
+          currency_code: "HKD",
+          value: totalPrice.toFixed(2),
+          breakdown: {
+            item_total: { currency_code: "HKD", value: totalPrice.toFixed(2) },
+          },
+        },
+        items: items.map((item) => ({
+          name: productNames[item.pid],
+          quantity: item.quantity,
+          unit_amount: { currency_code: "HKD", value: prices[item.pid].toFixed(2) },
+        })),
+        custom_id: orderId.toString(), // 将本地订单ID传递给 PayPal
+      }],
+      application_context: {
+        return_url: "https://ierg4210.eastasia.cloudapp.azure.com",
+        cancel_url: "https://ierg4210.eastasia.cloudapp.azure.com",
+      },
+    }, {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    // 更新订单以存储 PayPal 订单 ID
+    const updateSql = "UPDATE orders SET paypalOrderId = ? WHERE orderId = ?";
+    await new Promise((resolve, reject) => {
+      db.query(updateSql, [paypalResponse.data.id, orderId], (err) => {
+        if (err) reject(err);
+        resolve();
+      });
+    });
+
+    res.json({ success: true, id: paypalResponse.data.id });
+  } catch (error) {
+    console.error("Create order error:", error);
+    res.status(500).json({ success: false, message: "Failed to create order" });
+  }
 });
 
-// PayPal Webhook 路由
-app.post("/paypal-webhook", express.raw({ type: "application/json" }), async (req, res) => {
-  const webhookEvent = req.body;
-  const authAlgo = req.get("PAYPAL-AUTH-ALGO");
-  const certUrl = req.get("PAYPAL-CERT-URL");
-  const transmissionId = req.get("PAYPAL-TRANSMISSION-ID");
-  const transmissionSig = req.get("PAYPAL-TRANSMISSION-SIG");
-  const transmissionTime = req.get("PAYPAL-TRANSMISSION-TIME");
-  const webhookId = "8SF35942S85318903"; // 替换为你的 PayPal Webhook ID
+// 捕获 PayPal 支付
+app.post("/capture-paypal-order", csrfProtection, async (req, res) => {
+  const { orderID } = req.body;
 
-  // Step 1: 下载 PayPal 公钥证书
-  let certificate;
   try {
-    certificate = await new Promise((resolve, reject) => {
-      https.get(certUrl, (res) => {
-        let data = "";
-        res.on("data", (chunk) => (data += chunk));
-        res.on("end", () => resolve(data));
-      }).on("error", reject);
+    const accessToken = await getPayPalAccessToken();
+    const captureResponse = await axios.post(`${PAYPAL_API}/v2/checkout/orders/${orderID}/capture`, {}, {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
     });
-  } catch (err) {
-    console.error("Failed to download PayPal certificate:", err);
-    return res.status(400).send("Invalid certificate");
-  }
 
-  // Step 2: 构建签名验证数据
-  const payload = JSON.stringify(webhookEvent);
-  const message = `${transmissionId}|${transmissionTime}|${webhookId}|${crypto
-    .createHash("sha256")
-    .update(payload)
-    .digest("hex")}`;
-
-  // Step 3: 验证签名
-  const verifier = crypto.createVerify(authAlgo);
-  verifier.update(message);
-  verifier.end();
-
-  const isValid = verifier.verify(certificate, Buffer.from(transmissionSig, "base64"));
-
-  if (!isValid) {
-    console.error("Webhook signature verification failed");
-    return res.status(400).send("Signature verification failed");
-  }
-
-  // Step 4: 处理 Webhook 事件
-  if (webhookEvent.event_type === "CHECKOUT.ORDER.APPROVED") {
-    const orderId = webhookEvent.resource.custom_id; // 对应订单 ID
-    const paypalOrderId = webhookEvent.resource.id;
-
-    // 检查订单是否已处理
-    const checkSql = "SELECT status FROM orders WHERE orderId = ?";
-    db.query(checkSql, [orderId], (err, results) => {
-      if (err || !results.length || results[0].status !== "pending") {
-        return res.status(400).send("Order already processed or invalid");
-      }
-
-      // 获取订单详情
-      const orderSql = "SELECT * FROM orders WHERE orderId = ?";
-      db.query(orderSql, [orderId], (err, orderResults) => {
-        if (err || !orderResults.length) {
-          return res.status(400).send("Order not found");
-        }
-
-        const order = orderResults[0];
-        const itemsSql = "SELECT * FROM order_items WHERE orderId = ?";
-        db.query(itemsSql, [orderId], (err, itemResults) => {
-          if (err) {
-            return res.status(400).send("Order items not found");
-          }
-
-          // 重新生成摘要
-          const salt = order.digest.substring(0, 32); // 假设 salt 是前 32 位
-          const dataToHash = [
-            order.currency,
-            "sb-zwa7g40564566@business.example.com",
-            salt,
-            ...itemResults.map((item) => `${item.pid}:${item.quantity}:${item.price}`),
-            order.totalPrice.toFixed(2),
-          ].join("|");
-          const newDigest = crypto.createHash("sha256").update(dataToHash).digest("hex");
-
-          if (newDigest !== order.digest) {
-            return res.status(400).send("Digest validation failed");
-          }
-
-          // 更新订单状态
-          const updateSql = "UPDATE orders SET status = 'completed' WHERE orderId = ?";
-          db.query(updateSql, [orderId], (err) => {
-            if (err) {
-              return res.status(500).send("Failed to update order status");
-            }
-            res.status(200).send("Webhook processed");
-          });
+    if (captureResponse.data.status === "COMPLETED") {
+      const localOrderId = captureResponse.data.purchase_units[0].custom_id;
+      const updateSql = "UPDATE orders SET status = 'completed' WHERE orderId = ? AND paypalOrderId = ?";
+      await new Promise((resolve, reject) => {
+        db.query(updateSql, [localOrderId, orderID], (err) => {
+          if (err) reject(err);
+          resolve();
         });
       });
-    });
-  } else {
-    res.status(200).send("Webhook event ignored");
+      res.json({ success: true });
+    } else {
+      res.status(400).json({ success: false, message: "Payment capture failed" });
+    }
+  } catch (error) {
+    console.error("Capture payment error:", error);
+    res.status(500).json({ success: false, message: "Failed to capture payment" });
   }
 });
 
