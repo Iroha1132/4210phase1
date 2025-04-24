@@ -1,44 +1,43 @@
 <script type="text/javascript">
-  var gk_isXlsx = false;
-  var gk_xlsxFileLookup = {};
-  var gk_fileData = {};
-  function filledCell(cell) {
-    return cell !== '' && cell != null;
-  }
-  function loadFileData(filename) {
-    if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-      try {
-        var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-        var firstSheetName = workbook.SheetNames[0];
-        var worksheet = workbook.Sheets[firstSheetName];
-
-        // Convert sheet to JSON to filter blank rows
-        var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-        // Filter out blank rows (rows where all cells are empty, null, or undefined)
-        var filteredData = jsonData.filter(row => row.some(filledCell));
-
-        // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
-        var headerRowIndex = filteredData.findIndex((row, index) =>
-          row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-        );
-        // Fallback
-        if (headerRowIndex === -1 || headerRowIndex > 25) {
-          headerRowIndex = 0;
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
         }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
 
-        // Convert filtered JSON back to CSV
-        var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
-        csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-        return csv;
-      } catch (e) {
-        console.error(e);
-        return "";
-      }
-    }
-    return gk_fileData[filename] || "";
-  }
-</script>
-<!DOCTYPE html>
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
 <html lang="en">
 
 <head>
@@ -76,17 +75,22 @@
 
   <main>
     <section class="breadcrumb">
-      <p><a href="index.html">Home</a> / Product 4</p>
+      <p>Home > Product 4</p>
     </section>
 
     <section class="product-details">
       <img src="images/product4.jpg" alt="Product 4" />
-      <h2>Product 4</h2>
-      <p>Price: $49.99</p>
-      <p>Description: Product 4 is the ultimate choice for luxury and performance.</p>
-      <button class="add-to-cart" data-pid="4" data-name="Product 4" data-price="49.99">
-        Add to Cart
-      </button>
+      <div class="product-info">
+        <h2>Product 4</h2>
+        <p>$49.99</p>
+        <p>
+          Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod
+          tempor incididunt ut labore et dolore magna aliqua.
+        </p>
+        <button class="add-to-cart" data-pid="4" data-name="Product 4" data-price="49.99">
+          Add to Cart
+        </button>
+      </div>
     </section>
 
     <section class="shopping-list">
@@ -154,51 +158,38 @@
 
     // 更新购物车 UI
     function updateCartUI() {
-  const cart = JSON.parse(localStorage.getItem("cart")) || [];
-  const cartItems = document.getElementById("cart-items");
-  cartItems.innerHTML = "";
-  let totalAmount = 0;
+      const cart = JSON.parse(localStorage.getItem("cart")) || [];
+      const cartItems = document.getElementById("cart-items");
+      cartItems.innerHTML = "";
+      let totalAmount = 0;
 
-  cart.forEach((item, index) => {
-    if (!item.price || isNaN(parseFloat(item.price))) {
-      console.error(`Invalid price for item ${item.name}: ${item.price}`);
-      return;
+      cart.forEach((item, index) => {
+        if (!item.price || isNaN(parseFloat(item.price))) {
+          console.error(`Invalid price for item ${item.name}: ${item.price}`);
+          return;
+        }
+        const price = parseFloat(item.price).toFixed(2);
+        totalAmount += parseFloat(price) * item.quantity;
+
+        const cartItem = document.createElement("div");
+        cartItem.className = "cart-item";
+        cartItem.innerHTML = `
+          <input type="hidden" name="item_name_${index + 1}" value="${item.name}">
+          <input type="hidden" name="item_number_${index + 1}" value="${item.pid}">
+          <input type="hidden" name="quantity_${index + 1}" value="${item.quantity}">
+          <input type="hidden" name="amount_${index + 1}" value="${price}">
+          <input type="number" value="${item.quantity}" min="1" data-pid="${item.pid}">
+          <span>${item.name} - ${price} HKD</span>
+          <button class="remove-item" data-pid="${item.pid}">Remove</button>
+        `;
+        cartItems.appendChild(cartItem);
+      });
+
+      const totalElement = document.createElement("div");
+      totalElement.className = "total";
+      totalElement.innerHTML = `Total: ${totalAmount.toFixed(2)} HKD`;
+      cartItems.appendChild(totalElement);
     }
-    const price = parseFloat(item.price).toFixed(2);
-    totalAmount += parseFloat(price) * item.quantity;
-
-    const cartItem = document.createElement("div");
-    cartItem.className = "cart-item";
-    cartItem.innerHTML = `
-      <input type="hidden" name="item_name_${index + 1}" value="${item.name}">
-      <input type="hidden" name="item_number_${index + 1}" value="${item.pid}">
-      <input type="hidden" name="quantity_${index + 1}" value="${item.quantity}">
-      <input type="hidden" name="amount_${index + 1}" value="${price}">
-      <input type="number" value="${item.quantity}" min="1" data-pid="${item.pid}">
-      <span>${item.name} - ${price} HKD</span>
-      <button class="remove-item" data-pid="${item.pid}">Remove</button>
-    `;
-    cartItems.appendChild(cartItem);
-  });
-
-  const totalElement = document.createElement("div");
-  totalElement.className = "total";
-  totalElement.innerHTML = `Total: ${totalAmount.toFixed(2)} HKD`;
-  cartItems.appendChild(totalElement);
-
-  // 移除所有现有的 amount 字段
-  const existingAmountInputs = document.querySelectorAll('input[name="amount"]');
-  existingAmountInputs.forEach(input => input.remove());
-
-  // 添加单一的 amount 字段
-  if (totalAmount > 0) {
-    const totalAmountInput = document.createElement("input");
-    totalAmountInput.type = "hidden";
-    totalAmountInput.name = "amount";
-    totalAmountInput.value = totalAmount.toFixed(2);
-    document.getElementById("paypal-form").appendChild(totalAmountInput);
-  }
-}
 
     // 删除购物车中的商品
     document.addEventListener("click", (event) => {
@@ -228,83 +219,71 @@
 
     // 结账按钮点击事件
     document.getElementById("paypal-form").addEventListener("submit", (e) => {
-  e.preventDefault();
-  const cart = JSON.parse(localStorage.getItem("cart")) || [];
-  if (cart.length === 0) {
-    alert("您的购物车为空！");
-    return;
-  }
-
-  updateCartUI();
-
-  // 验证 amount_X 字段
-  const formData = new FormData(document.getElementById("paypal-form"));
-  let hasAmount = false;
-  for (const [key, val] of formData.entries()) {
-    if (key.startsWith("amount_")) {
-      hasAmount = true;
-    }
-  }
-  if (!hasAmount) {
-    alert("错误：表单中缺少金额字段！");
-    return;
-  }
-
-  const items = cart.map((item) => ({
-    pid: item.pid,
-    quantity: item.quantity,
-  }));
-
-  fetch("/validate-order", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-CSRF-Token": document.getElementById("csrf-token").value,
-    },
-    credentials: "include",
-    body: JSON.stringify({ items }),
-  })
-    .then((response) => response.json())
-    .then((data) => {
-      if (data.success) {
-        document.getElementById("invoice").value = data.orderId;
-        document.getElementById("custom").value = data.digest;
-
-        // 移除所有现有的 amount 字段
-        const existingAmountInputs = document.querySelectorAll('input[name="amount"]');
-        existingAmountInputs.forEach(input => input.remove());
-
-        // 添加单一的 amount 字段
-        if (data.totalPrice && parseFloat(data.totalPrice) > 0) {
-          const totalAmountInput = document.createElement("input");
-          totalAmountInput.type = "hidden";
-          totalAmountInput.name = "amount";
-          totalAmountInput.value = parseFloat(data.totalPrice).toFixed(2);
-          document.getElementById("paypal-form").appendChild(totalAmountInput);
-        } else {
-          alert("错误：无效的总金额！");
-          return;
-        }
-
-        // 打印最终表单数据
-        const updatedFormData = new FormData(document.getElementById("paypal-form"));
-        console.log("Final form data:");
-        for (const [key, val] of updatedFormData.entries()) {
-          console.log(`  ${key}: ${val}`);
-        }
-
-        localStorage.removeItem("cart");
-        updateCartUI();
-        document.getElementById("paypal-form").submit();
-      } else {
-        alert("订单验证失败：" + data.message);
+      e.preventDefault();
+      const cart = JSON.parse(localStorage.getItem("cart")) || [];
+      if (cart.length === 0) {
+        alert("您的购物车为空！");
+        return;
       }
-    })
-    .catch((error) => {
-      console.error("错误：", error);
-      alert("订单验证过程中出错");
+
+      updateCartUI();
+
+      // 验证 amount_X 字段
+      const formData = new FormData(document.getElementById("paypal-form"));
+      let hasAmount = false;
+      for (const [key, val] of formData.entries()) {
+        if (key.startsWith("amount_")) {
+          hasAmount = true;
+        }
+      }
+      if (!hasAmount) {
+        alert("错误：表单中缺少金额字段！");
+        return;
+      }
+
+      // 移除 _csrf 字段
+      const csrfInput = document.querySelector('input[name="_csrf"]');
+      if (csrfInput) csrfInput.remove();
+
+      const items = cart.map((item) => ({
+        pid: item.pid,
+        quantity: item.quantity,
+      }));
+
+      fetch("/validate-order", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": document.getElementById("csrf-token").value,
+        },
+        credentials: "include",
+        body: JSON.stringify({ items }),
+      })
+        .then((response) => response.json())
+        .then((data) => {
+          if (data.success) {
+            document.getElementById("invoice").value = data.orderId;
+            document.getElementById("custom").value = data.digest;
+
+            // 打印最终表单数据
+            const updatedFormData = new FormData(document.getElementById("paypal-form"));
+            console.log("Final form data:");
+            for (const [key, val] of updatedFormData.entries()) {
+              console.log(`  ${key}: ${val}`);
+            }
+
+            localStorage.removeItem("cart");
+            updateCartUI();
+            document.getElementById("paypal-form").submit();
+          } else {
+            alert("订单验证失败：" + data.message);
+          }
+        })
+        .catch((error) => {
+          console.error("错误：", error);
+          alert("订单验证过程中出错");
+        });
     });
-});
 
     function checkUserStatus() {
       fetch("/user-info", {
@@ -364,7 +343,8 @@
       updateCartUI();
     });
   </script>
-  <script>(function () { function c() { var b = a.contentDocument || a.contentWindow.document; if (b) { var d = b.createElement('script'); d.innerHTML = "window.__CF$cv$params={r:'9354b70afbd808b3',t:'MTc0NTQ4ODQyMS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);"; b.getElementsByTagName('head')[0].appendChild(d) } } if (document.body) { var a = document.createElement('iframe'); a.height = 1; a.width = 1; a.style.position = 'absolute'; a.style.top = 0; a.style.left = 0; a.style.border = 'none'; a.style.visibility = 'hidden'; document.body.appendChild(a); if ('loading' !== document.readyState) c(); else if (window.addEventListener) document.addEventListener('DOMContentLoaded', c); else { var e = document.onreadystatechange || function () { }; document.onreadystatechange = function (b) { e(b); 'loading' !== document.readyState && (document.onreadystatechange = e, c()) } } } })();</script>
-</body>
+  <script>(function () { function c() { var b = a.contentDocument || a.contentWindow.document; if (b) { var d = b.createElement('script'); d.innerHTML = "window.__CF$cv$params={r:'9346a4737a0abcf6',t:'MTc0NTM0MDg1OS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);"; b.getElementsByTagName('head')[0].appendChild(d) } } if (document.body) { var a = document.createElement('iframe'); a.height = 1; a.width = 1; a.style.position = 'absolute'; a.style.top = 0; a.style.left = 0; a.style.border = 'none'; a.style.visibility = 'hidden'; document.body.appendChild(a); if ('loading' !== document.readyState) c(); else if (window.addEventListener) document.addEventListener('DOMContentLoaded', c); else { var e = document.onreadystatechange || function () { }; document.onreadystatechange = function (b) { e(b); 'loading' !== document.readyState && (document.onreadystatechange = e, c()) } } } })();</script>
+  <script>(function () { function c() { var b = a.contentDocument || a.contentWindow.document; if (b) { var d = b.createElement('script'); d.innerHTML = "window.__CF$cv$params={r:'9354b4160bf88b87',t:'MTc0NTQ4ODMwMC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);"; b.getElementsByTagName('head')[0].appendChild(d) } } if (document.body) { var a = document.createElement('iframe'); a.height = 1; a.width = 1; a.style.position = 'absolute'; a.style.top = 0; a.style.left = 0; a.style.border = 'none'; a.style.visibility = 'hidden'; document.body.appendChild(a); if ('loading' !== document.readyState) c(); else if (window.addEventListener) document.addEventListener('DOMContentLoaded', c); else { var e = document.onreadystatechange || function () { }; document.onreadystatechange = function (b) { e(b); 'loading' !== document.readyState && (document.onreadystatechange = e, c()) } } } })();</script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'93553979f9936738',t:'MTc0NTQ5Mzc2NC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 
 </html>
