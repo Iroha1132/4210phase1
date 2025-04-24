@@ -7,12 +7,12 @@ body {
 }
 
 header {
-  background-color: #333;
-  color: #fff;
-  padding: 1rem;
-  text-align: center;
-  position: relative; /* 为绝对定位的子元素提供参考 */
-  min-height: 60px; /* 确保有足够空间 */
+    background-color: #333;
+    color: #fff;
+    padding: 1rem;
+    text-align: center;
+    position: relative;
+    min-height: 60px;
 }
 
 nav ul {
@@ -33,7 +33,7 @@ nav ul li a {
 
 main {
     padding: 2rem;
-    padding-bottom: 100px; /* Added to prevent footer from overlapping content */
+    padding-bottom: 100px;
 }
 
 footer {
@@ -58,7 +58,7 @@ footer {
     display: flex;
     flex-wrap: wrap;
     gap: 1rem;
-    justify-content: space-between; /* Ensure products are spaced evenly */
+    justify-content: space-between;
 }
 
 .product {
@@ -66,10 +66,10 @@ footer {
     border: 1px solid #ddd;
     border-radius: 5px;
     padding: 1rem;
-    width: calc(50% - 0.5rem); /* Adjusted to fit 2 products per line */
+    width: calc(50% - 0.5rem);
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
     text-align: center;
-    box-sizing: border-box; /* Ensure padding and border are included in the width */
+    box-sizing: border-box;
 }
 
 .product img {
@@ -103,21 +103,21 @@ footer {
 
 /* Shopping List */
 .shopping-list {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  background-color: #fff;
-  border: 1px solid #ddd;
-  border-radius: 5px;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-  width: 200px;
-  padding: 1rem;
-  transition: all 0.3s ease;
-  z-index: 99; /* 确保在用户状态下方 */
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background-color: #fff;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    width: 250px; /* 增加宽度以容纳PayPal按钮 */
+    padding: 1rem;
+    transition: all 0.3s ease;
+    z-index: 101; /* 提高z-index，确保不被user-status覆盖 */
 }
 
 .shopping-list:hover {
-    width: 300px;
+    width: 350px; /* 悬停时扩展 */
 }
 
 .shopping-list h2 {
@@ -126,12 +126,7 @@ footer {
 }
 
 .cart-items {
-    display: none;
     margin-bottom: 1rem;
-}
-
-.shopping-list:hover .cart-items {
-    display: block;
 }
 
 .cart-item {
@@ -145,47 +140,70 @@ footer {
     margin-right: 1rem;
 }
 
-.checkout {
-    display: none;
-    background-color: #007bff;
-    color: #fff;
-    border: none;
-    padding: 0.5rem 1rem;
-    border-radius: 5px;
-    cursor: pointer;
-    width: 100%;
+.total {
+    font-weight: bold;
+    margin-top: 1rem;
+    margin-bottom: 1rem; /* 与PayPal按钮分隔 */
 }
 
-.shopping-list:hover .checkout {
-    display: block;
+/* PayPal Button Container */
+#paypal-button-container {
+    margin-top: 1rem;
+    text-align: center;
 }
 
-.checkout:hover {
-    background-color: #0056b3;
+#paypal-button-container .paypal-buttons {
+    display: inline-block;
+    max-width: 100%; /* 确保按钮不超过容器 */
 }
 
+/* User Status */
 .user-status {
-  position: absolute;
-  top: 20px;
-  right: 240px; /* 留出购物车的空间 */
-  cursor: pointer;
-  padding: 5px 10px;
-  background-color: #f5f5f5;
-  border-radius: 4px;
-  color: #333; /* 添加文字颜色 */
-  z-index: 100; /* 确保在导航栏上方 */
+    position: absolute;
+    top: 20px;
+    right: 290px; /* 调整位置，留出更大的购物车空间 */
+    cursor: pointer;
+    padding: 5px 10px;
+    background-color: #f5f5f5;
+    border-radius: 4px;
+    color: #333;
+    z-index: 100;
 }
 
 .user-status:hover {
-  background-color: #e0e0e0;
+    background-color: #e0e0e0;
 }
 
 .user-status a {
-  color: #ff5722;
-  text-decoration: none;
-  font-weight: bold;
+    color: #ff5722;
+    text-decoration: none;
+    font-weight: bold;
 }
 
 .user-status a:hover {
-  text-decoration: underline;
+    text-decoration: underline;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .product {
+        width: 100%; /* 移动设备上每行一个产品 */
+    }
+
+    .shopping-list {
+        width: 100%;
+        right: 0;
+        top: auto;
+        bottom: 60px; /* 放在footer上方 */
+        border-radius: 5px 5px 0 0;
+    }
+
+    .shopping-list:hover {
+        width: 100%;
+    }
+
+    .user-status {
+        right: 20px; /* 移动设备上调整位置 */
+        top: 10px;
+    }
 }
