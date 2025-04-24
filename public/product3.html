@@ -220,10 +220,10 @@
       }
 
       updateCartUI(); // 在提交前重新渲染购物车
-const formData = new FormData(document.getElementById("paypal-form"));
-  for (const [key, val] of formData.entries()) {
-    console.log(key, val); // 检查 amount_X、currency_code 等字段
-  }
+      const formData = new FormData(document.getElementById("paypal-form"));
+      for (const [key, val] of formData.entries()) {
+        console.log(key, val); // 检查 amount_X、currency_code 等字段
+      }
       const items = cart.map((item) => ({
         pid: item.pid,
         quantity: item.quantity,
@@ -241,11 +241,22 @@ const formData = new FormData(document.getElementById("paypal-form"));
         .then((response) => response.json())
         .then((data) => {
           if (data.success) {
+
+            // ▼ 明确等待字段更新完成 ▼
             document.getElementById("invoice").value = data.orderId;
             document.getElementById("custom").value = data.digest;
+
             localStorage.removeItem("cart");
             updateCartUI();
-            document.getElementById("paypal-form").submit();
+
+            // 调试：检查字段是否已填充
+            console.log("invoice:", document.getElementById("invoice").value);
+            console.log("custom:", document.getElementById("custom").value);
+
+            // ▼ 延迟 100ms 确保 DOM 更新 ▼
+            setTimeout(() => {
+              document.getElementById("paypal-form").submit();
+            }, 100);
           } else {
             alert("Order validation failed: " + data.message);
           }
