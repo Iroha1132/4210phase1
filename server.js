@@ -498,14 +498,14 @@ app.post("/validate-order", csrfProtection, (req, res) => {
   const pids = items.map((item) => xss(item.pid));
   const quantities = items.map((item) => parseInt(item.quantity));
   if (quantities.some((q) => q <= 0)) {
-    return res.json({ success: false, message: "Invalid quantity" });
+    return res.json({ success: false, message: "无效的数量" });
   }
 
   const sql = "SELECT pid, price FROM products WHERE pid IN (?)";
   db.query(sql, [pids], (err, results) => {
     if (err || results.length !== pids.length) {
-      console.error("Product query error:", err);
-      return res.json({ success: false, message: "Invalid products" });
+      console.error("产品查询错误：", err);
+      return res.json({ success: false, message: "无效的产品" });
     }
 
     const prices = {};
@@ -518,11 +518,11 @@ app.post("/validate-order", csrfProtection, (req, res) => {
       totalPrice += prices[item.pid] * item.quantity;
     });
 
-    console.log("Calculated totalPrice:", totalPrice); // 调试日志
+    console.log("计算的总价：", totalPrice); // 调试日志
 
     if (!totalPrice || totalPrice <= 0) {
-      console.error("Invalid totalPrice:", totalPrice);
-      return res.json({ success: false, message: "Invalid total price" });
+      console.error("无效的总价：", totalPrice);
+      return res.json({ success: false, message: "无效的总价" });
     }
 
     const salt = crypto.randomBytes(16).toString("hex");
@@ -538,8 +538,8 @@ app.post("/validate-order", csrfProtection, (req, res) => {
     const orderSql = "INSERT INTO orders (userId, username, totalPrice, digest, status) VALUES (?, ?, ?, ?, 'pending')";
     db.query(orderSql, [userId, username, totalPrice, digest], (err, result) => {
       if (err) {
-        console.error("Order creation error:", err);
-        return res.json({ success: false, message: "Order creation failed" });
+        console.error("订单创建错误：", err);
+        return res.json({ success: false, message: "订单创建失败" });
       }
 
       const orderId = result.insertId;
@@ -553,8 +553,8 @@ app.post("/validate-order", csrfProtection, (req, res) => {
 
       db.query(itemSql, [itemValues], (err) => {
         if (err) {
-          console.error("Order items creation error:", err);
-          return res.json({ success: false, message: "Order items creation failed" });
+          console.error("订单项创建错误：", err);
+          return res.json({ success: false, message: "订单项创建失败" });
         }
         res.json({ success: true, orderId, digest, totalPrice: totalPrice.toFixed(2) });
       });
