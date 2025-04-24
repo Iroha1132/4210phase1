@@ -17,6 +17,7 @@ const fs = require("fs");
 const crypto = require("crypto");
 
 const upload = multer({ dest: "uploads/" });
+const app = express();
 
 app.use(
   helmet.contentSecurityPolicy({
