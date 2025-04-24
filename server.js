@@ -89,7 +89,11 @@ db.connect((err) => {
       FOREIGN KEY (userId) REFERENCES users(userid)
     )`;
   db.query(createOrdersTable, (err) => {
-    if (err) throw err;
+    if (err) {
+      console.error("Error creating orders table:", err);
+      throw err;
+    }
+    console.log("Orders table created or already exists");
   });
 
   // 创建 order_items 表
@@ -104,7 +108,11 @@ db.connect((err) => {
       FOREIGN KEY (pid) REFERENCES products(pid)
     )`;
   db.query(createOrderItemsTable, (err) => {
-    if (err) throw err;
+    if (err) {
+      console.error("Error creating order_items table:", err);
+      throw err;
+    }
+    console.log("Order_items table created or already exists");
   });
 });
 
@@ -588,7 +596,7 @@ app.post("/validate-order", csrfProtection, async (req, res) => {
           orderId, 
           digest, 
           totalPrice: totalPrice.toFixed(2),
-          currency: "HKD" // Added currency in response
+          currency: "HKD"
         });
       });
     });
