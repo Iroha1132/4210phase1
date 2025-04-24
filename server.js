@@ -15,8 +15,16 @@ const helmet = require("helmet");
 const https = require("https");
 const fs = require("fs");
 const crypto = require("crypto");
+const paypal = require("paypal-rest-sdk"); // 新增 PayPal SDK
 
 const upload = multer({ dest: "uploads/" });
+
+// 配置 PayPal SDK
+paypal.configure({
+  mode: "sandbox", // 使用沙盒环境，生产环境改为 "live"
+  client_id: "AV6sDnhRtyl78RIXw-yeIwWM7DqUTYDvlUSP5l82fY9ZyIqubZxnahfJJ0uMPCuUOtLCA0dyLCw_gxPq", // 替换为你的 PayPal Client ID
+  client_secret: "EOOXF8GeF25ErUzFKC0Pz6BMVxgBEnFbrLm9aVoTMu0XC3iaoPgYUPddAZhhdgBM0qpyhybRl793e7QJ", // 替换为你的 PayPal Client Secret
+});
 
 app.use(
   helmet.contentSecurityPolicy({
@@ -88,11 +96,7 @@ db.connect((err) => {
       FOREIGN KEY (userId) REFERENCES users(userid)
     )`;
   db.query(createOrdersTable, (err) => {
-    if (err) {
-      console.error("Error creating orders table:", err);
-      throw err;
-    }
-    console.log("Orders table created or already exists");
+    if (err) throw err;
   });
 
   // 创建 order_items 表
@@ -107,11 +111,7 @@ db.connect((err) => {
       FOREIGN KEY (pid) REFERENCES products(pid)
     )`;
   db.query(createOrderItemsTable, (err) => {
-    if (err) {
-      console.error("Error creating order_items table:", err);
-      throw err;
-    }
-    console.log("Order_items table created or already exists");
+    if (err) throw err;
   });
 });
 
@@ -475,59 +475,38 @@ app.delete("/delete-category/:catid", authenticateAdmin, (req, res) => {
 });
 
 // 订单验证路由
-app.post("/validate-order", csrfProtection, async (req, res) => {
+app.post("/validate-order", csrfProtection, (req, res) => {
   const { items } = req.body;
   const token = req.cookies.auth_token;
   let userId = null;
   let username = "guest";
 
-  // Validate input
-  if (!items || !Array.isArray(items) || items.length === 0) {
-    console.error("Invalid items input:", items);
-    return res.status(400).json({ success: false, message: "Invalid or empty items array" });
-  }
-
-  // Check for required fields in items
-  for (const item of items) {
-    if (!item.pid || !item.quantity || isNaN(item.quantity) || item.quantity <= 0) {
-      console.error("Invalid item data:", item);
-      return res.status(400).json({ success: false, message: "Invalid product ID or quantity" });
-    }
-  }
-
-  // Fetch user info if authenticated
+  // 验证用户（如果已登录）
   if (token) {
-    try {
-      const decoded = jwt.verify(token, "secret_key");
-      userId = decoded.userId;
-      const sql = "SELECT email FROM users WHERE userid = ?";
-      const results = await new Promise((resolve, reject) => {
+    jwt.verify(token, "secret_key", (err, decoded) => {
+      if (!err) {
+        userId = decoded.userId;
+        const sql = "SELECT email FROM users WHERE userid = ?";
         db.query(sql, [userId], (err, results) => {
-          if (err) reject(err);
-          resolve(results);
+          if (!err && results.length > 0) {
+            username = results[0].email;
+          }
         });
-      });
-      if (results.length > 0) {
-        username = results[0].email;
       }
-    } catch (err) {
-      console.warn("Token verification failed:", err.message);
-    }
+    });
   }
 
+  // 验证产品和价格
   const pids = items.map((item) => xss(item.pid));
   const quantities = items.map((item) => parseInt(item.quantity));
+  if (quantities.some((q) => q <= 0)) {
+    return res.json({ success: false, message: "Invalid quantity" });
+  }
 
-  // Fetch product prices
   const sql = "SELECT pid, price FROM products WHERE pid IN (?)";
   db.query(sql, [pids], (err, results) => {
-    if (err) {
-      console.error("Product query error:", err);
-      return res.status(500).json({ success: false, message: "Failed to fetch products" });
-    }
-    if (results.length !== pids.length) {
-      console.error("Not all products found:", { requested: pids, found: results.map(r => r.pid) });
-      return res.status(400).json({ success: false, message: "Some products not found" });
+    if (err || results.length !== pids.length) {
+      return res.json({ success: false, message: "Invalid products" });
     }
 
     const prices = {};
@@ -535,29 +514,12 @@ app.post("/validate-order", csrfProtection, async (req, res) => {
       prices[row.pid] = row.price;
     });
 
-    // Calculate total price
     let totalPrice = 0;
-    const itemDetails = items.map((item) => {
-      const price = prices[item.pid];
-      const itemTotal = price * item.quantity;
-      totalPrice += itemTotal;
-      return { pid: item.pid, quantity: item.quantity, price, itemTotal };
+    items.forEach((item) => {
+      totalPrice += prices[item.pid] * item.quantity;
     });
 
-    console.log("Order details:", {
-      items: itemDetails,
-      totalPrice,
-      currency: "HKD",
-      userId,
-      username
-    });
-
-    if (!totalPrice || totalPrice <= 0) {
-      console.error("Invalid total price:", totalPrice);
-      return res.status(400).json({ success: false, message: "Invalid total price" });
-    }
-
-    // Generate digest
+    // 生成摘要
     const salt = crypto.randomBytes(16).toString("hex");
     const dataToHash = [
       "HKD",
@@ -568,12 +530,11 @@ app.post("/validate-order", csrfProtection, async (req, res) => {
     ].join("|");
     const digest = crypto.createHash("sha256").update(dataToHash).digest("hex");
 
-    // Insert order
+    // 存储订单
     const orderSql = "INSERT INTO orders (userId, username, totalPrice, digest, status) VALUES (?, ?, ?, ?, 'pending')";
     db.query(orderSql, [userId, username, totalPrice, digest], (err, result) => {
       if (err) {
-        console.error("Order creation error:", err);
-        return res.status(500).json({ success: false, message: "Failed to create order" });
+        return res.json({ success: false, message: "Order creation failed" });
       }
 
       const orderId = result.insertId;
@@ -587,16 +548,9 @@ app.post("/validate-order", csrfProtection, async (req, res) => {
 
       db.query(itemSql, [itemValues], (err) => {
         if (err) {
-          console.error("Order items creation error:", err);
-          return res.status(500).json({ success: false, message: "Failed to create order items" });
+          return res.json({ success: false, message: "Order items creation failed" });
         }
-        res.json({ 
-          success: true, 
-          orderId, 
-          digest, 
-          totalPrice: totalPrice.toFixed(2),
-          currency: "HKD"
-        });
+        res.json({ success: true, orderId, digest });
       });
     });
   });
@@ -611,13 +565,6 @@ app.post("/paypal-webhook", express.raw({ type: "application/json" }), async (re
   const transmissionSig = req.get("PAYPAL-TRANSMISSION-SIG");
   const transmissionTime = req.get("PAYPAL-TRANSMISSION-TIME");
   const webhookId = "8SF35942S85318903"; // 替换为你的 PayPal Webhook ID
-
-  // Log webhook event for debugging
-  console.log("Received PayPal webhook:", {
-    eventType: webhookEvent.event_type,
-    resourceId: webhookEvent.resource?.id,
-    customId: webhookEvent.resource?.custom_id
-  });
 
   // Step 1: 下载 PayPal 公钥证书
   let certificate;
@@ -658,28 +605,17 @@ app.post("/paypal-webhook", express.raw({ type: "application/json" }), async (re
     const orderId = webhookEvent.resource.custom_id; // 对应订单 ID
     const paypalOrderId = webhookEvent.resource.id;
 
-    if (!orderId) {
-      console.error("Missing custom_id in webhook event");
-      return res.status(400).send("Missing order ID");
-    }
-
     // 检查订单是否已处理
     const checkSql = "SELECT status FROM orders WHERE orderId = ?";
     db.query(checkSql, [orderId], (err, results) => {
-      if (err || !results.length) {
-        console.error("Order not found or database error:", err);
-        return res.status(400).send("Order not found");
-      }
-      if (results[0].status !== "pending") {
-        console.warn("Order already processed:", { orderId, status: results[0].status });
-        return res.status(400).send("Order already processed");
+      if (err || !results.length || results[0].status !== "pending") {
+        return res.status(400).send("Order already processed or invalid");
       }
 
       // 获取订单详情
       const orderSql = "SELECT * FROM orders WHERE orderId = ?";
       db.query(orderSql, [orderId], (err, orderResults) => {
         if (err || !orderResults.length) {
-          console.error("Order details fetch error:", err);
           return res.status(400).send("Order not found");
         }
 
@@ -687,7 +623,6 @@ app.post("/paypal-webhook", express.raw({ type: "application/json" }), async (re
         const itemsSql = "SELECT * FROM order_items WHERE orderId = ?";
         db.query(itemsSql, [orderId], (err, itemResults) => {
           if (err) {
-            console.error("Order items fetch error:", err);
             return res.status(400).send("Order items not found");
           }
 
@@ -703,7 +638,6 @@ app.post("/paypal-webhook", express.raw({ type: "application/json" }), async (re
           const newDigest = crypto.createHash("sha256").update(dataToHash).digest("hex");
 
           if (newDigest !== order.digest) {
-            console.error("Digest validation failed:", { orderId, expected: order.digest, actual: newDigest });
             return res.status(400).send("Digest validation failed");
           }
 
@@ -711,17 +645,14 @@ app.post("/paypal-webhook", express.raw({ type: "application/json" }), async (re
           const updateSql = "UPDATE orders SET status = 'completed' WHERE orderId = ?";
           db.query(updateSql, [orderId], (err) => {
             if (err) {
-              console.error("Order status update error:", err);
               return res.status(500).send("Failed to update order status");
             }
-            console.log("Order completed:", { orderId, paypalOrderId });
             res.status(200).send("Webhook processed");
           });
         });
       });
     });
   } else {
-    console.log("Ignoring webhook event:", webhookEvent.event_type);
     res.status(200).send("Webhook event ignored");
   }
 });
@@ -744,7 +675,6 @@ app.get("/user-orders", (req, res) => {
       LIMIT 5`;
     db.query(sql, [decoded.userId], (err, results) => {
       if (err) {
-        console.error("User orders fetch error:", err);
         return res.status(500).json({ error: "Failed to fetch orders" });
       }
 
@@ -784,7 +714,6 @@ app.get("/admin-orders", authenticateAdmin, (req, res) => {
     ORDER BY o.createdAt DESC`;
   db.query(sql, (err, results) => {
     if (err) {
-      console.error("Admin orders fetch error:", err);
       return res.status(500).json({ error: "Failed to fetch orders" });
     }
 
