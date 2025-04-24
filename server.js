@@ -38,8 +38,7 @@ app.use(cors({
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 app.use(cookieParser());
-app.use('/public', express.static(path.join(__dirname, 'public')));
-app.use(express.static(__dirname, { index: false }));
+app.use(express.static(path.join(__dirname, 'public')));
 
 // CSRF Protection
 const generateCsrfToken = () => crypto.randomBytes(16).toString('hex');
@@ -101,19 +100,19 @@ const isAdmin = (req, res, next) => {
 
 // Routes
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.get('/login', (req, res) => {
-    res.sendFile(path.join(__dirname, 'login.html'));
+    res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
 app.get('/register', (req, res) => {
-    res.sendFile(path.join(__dirname, 'register.html'));
+    res.sendFile(path.join(__dirname, 'public', 'register.html'));
 });
 
 app.get('/product', (req, res) => {
-    res.sendFile(path.join(__dirname, 'product.html'));
+    res.sendFile(path.join(__dirname, 'public', 'product.html'));
 });
 
 app.get('/admin', authenticate, isAdmin, (req, res) => {
@@ -125,11 +124,11 @@ app.get('/public/admin.html', (req, res) => {
 });
 
 app.get('/user-dashboard', authenticate, (req, res) => {
-    res.sendFile(path.join(__dirname, 'user-dashboard.html'));
+    res.sendFile(path.join(__dirname, 'public', 'user-dashboard.html'));
 });
 
 app.get('/orders', authenticate, (req, res) => {
-    res.sendFile(path.join(__dirname, 'orders.html'));
+    res.sendFile(path.join(__dirname, 'public', 'orders.html'));
 });
 
 // API Routes
