@@ -1,7 +1,7 @@
 const express = require("express");
 const bodyParser = require("body-parser");
 const mysql = require("mysql");
-const app = express();
+const fetch = require("node-fetch");
 const path = require("path");
 const multer = require("multer");
 const sharp = require("sharp");
@@ -15,16 +15,8 @@ const helmet = require("helmet");
 const https = require("https");
 const fs = require("fs");
 const crypto = require("crypto");
-const paypal = require("paypal-rest-sdk"); // 新增 PayPal SDK
 
 const upload = multer({ dest: "uploads/" });
-
-// 配置 PayPal SDK
-paypal.configure({
-  mode: "sandbox", // 使用沙盒环境，生产环境改为 "live"
-  client_id: "AV6sDnhRtyl78RIXw-yeIwWM7DqUTYDvlUSP5l82fY9ZyIqubZxnahfJJ0uMPCuUOtLCA0dyLCw_gxPq", // 替换为你的 PayPal Client ID
-  client_secret: "EOOXF8GeF25ErUzFKC0Pz6BMVxgBEnFbrLm9aVoTMu0XC3iaoPgYUPddAZhhdgBM0qpyhybRl793e7QJ", // 替换为你的 PayPal Client Secret
-});
 
 app.use(
   helmet.contentSecurityPolicy({
@@ -82,15 +74,26 @@ db.connect((err) => {
   if (err) throw err;
   console.log("MySQL connected");
 
-  // 创建 orders 表
+  // 更新 orders 表，添加 salt 欄位並設置貨幣為 USD
+  const updateOrdersTable = `
+    ALTER TABLE orders
+    ADD COLUMN IF NOT EXISTS salt VARCHAR(32) NULL,
+    MODIFY COLUMN currency VARCHAR(3) DEFAULT 'USD'
+  `;
+  db.query(updateOrdersTable, (err) => {
+    if (err) console.error("Failed to update orders table:", err);
+  });
+
+  // 創建 orders 表
   const createOrdersTable = `
     CREATE TABLE IF NOT EXISTS orders (
       orderId INT AUTO_INCREMENT PRIMARY KEY,
       userId INT NULL,
       username VARCHAR(255) NULL,
-      currency VARCHAR(3) DEFAULT 'HKD',
+      currency VARCHAR(3) DEFAULT 'USD',
       totalPrice DECIMAL(10,2) NOT NULL,
       digest VARCHAR(255) NOT NULL,
+      salt VARCHAR(32) NULL,
       status ENUM('pending', 'completed', 'failed') DEFAULT 'pending',
       createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (userId) REFERENCES users(userid)
@@ -99,7 +102,7 @@ db.connect((err) => {
     if (err) throw err;
   });
 
-  // 创建 order_items 表
+  // 創建 order_items 表
   const createOrderItemsTable = `
     CREATE TABLE IF NOT EXISTS order_items (
       itemId INT AUTO_INCREMENT PRIMARY KEY,
@@ -116,7 +119,8 @@ db.connect((err) => {
 });
 
 app.use(bodyParser.urlencoded({ extended: false }));
-app.use(bodyParser.json());
+app.use(bodyParser.json({ type: "application/json" }));
+app.use(express.raw({ type: "application/json" })); // 處理 Webhook 的原始 JSON
 app.use(express.static(path.join(__dirname, "public")));
 
 const authenticateAdmin = (req, res, next) => {
@@ -161,7 +165,7 @@ app.post("/login", (req, res) => {
   db.query(sql, [xss(email)], (err, results) => {
     if (err) {
       console.error(err);
-      return res.status(500).json({ success: false, message: "服务器错误" });
+      return res.status(500).json({ success: false, message: "伺服器錯誤" });
     }
 
     if (results.length > 0) {
@@ -191,7 +195,7 @@ app.post("/login", (req, res) => {
     
     res.status(401).json({ 
       success: false, 
-      message: "邮箱或密码错误" 
+      message: "郵箱或密碼錯誤" 
     });
   });
 });
@@ -211,48 +215,42 @@ app.post("/change-password", csrfProtection, (req, res) => {
     const { currentPassword, newPassword } = req.body;
     const userId = decoded.userId;
 
-    // Validate input
     if (!currentPassword || !newPassword) {
-      return res.status(400).json({ success: false, message: "Missing required fields" });
+      return res.status(400).json({ success: false, message: "缺少必要欄位" });
     }
 
     if (newPassword.length < 8) {
-      return res.status(400).json({ success: false, message: "New password must be at least 8 characters" });
+      return res.status(400).json({ success: false, message: "新密碼必須至少8個字符" });
     }
 
-    // Fetch user from database
     const sql = "SELECT password FROM users WHERE userid = ?";
     db.query(sql, [userId], (err, results) => {
       if (err) {
-        console.error("Database error:", err);
-        return res.status(500).json({ success: false, message: "Server error" });
+        console.error("資料庫錯誤:", err);
+        return res.status(500).json({ success: false, message: "伺服器錯誤" });
       }
 
       if (results.length === 0) {
-        return res.status(404).json({ success: false, message: "User not found" });
+        return res.status(404).json({ success: false, message: "用戶未找到" });
       }
 
       const user = results[0];
 
-      // Verify current password
       if (!bcrypt.compareSync(currentPassword, user.password)) {
-        return res.status(401).json({ success: false, message: "Current password is incorrect" });
+        return res.status(401).json({ success: false, message: "當前密碼不正確" });
       }
 
-      // Hash new password
       const hashedPassword = bcrypt.hashSync(newPassword, 10);
 
-      // Update password in database
       const updateSql = "UPDATE users SET password = ? WHERE userid = ?";
       db.query(updateSql, [hashedPassword, userId], (err, result) => {
         if (err) {
-          console.error("Database error:", err);
-          return res.status(500).json({ success: false, message: "Failed to update password" });
+          console.error("資料庫錯誤:", err);
+          return res.status(500).json({ success: false, message: "更新密碼失敗" });
         }
 
-        // Clear auth token to force re-login
         res.clearCookie("auth_token");
-        res.json({ success: true, message: "Password changed successfully" });
+        res.json({ success: true, message: "密碼更改成功" });
       });
     });
   });
@@ -315,7 +313,7 @@ app.get("/user-info", (req, res) => {
     const sql = "SELECT email, admin_flag FROM users WHERE userid = ?";
     db.query(sql, [decoded.userId], (err, results) => {
       if (err || !results.length) {
-        return res.status(404).json({ error: "User not found" });
+        return res.status(404).json({ error: "用戶未找到" });
       }
       res.json({
         email: results[0].email,
@@ -365,7 +363,7 @@ app.post(
             ],
             (err, result) => {
               if (err) throw err;
-              res.send("Product added");
+              res.send("產品已添加");
             }
           );
         });
@@ -377,7 +375,7 @@ app.post(
         [xss(catid), sanitizedName, xss(price), sanitizedDescription],
         (err, result) => {
           if (err) throw err;
-          res.send("Product added");
+          res.send("產品已添加");
         }
       );
     }
@@ -416,7 +414,7 @@ app.put(
             ],
             (err, result) => {
               if (err) throw err;
-              res.send("Product updated");
+              res.send("產品已更新");
             }
           );
         });
@@ -428,7 +426,7 @@ app.put(
         [xss(catid), sanitizedName, xss(price), sanitizedDescription, pid],
         (err, result) => {
           if (err) throw err;
-          res.send("Product updated");
+          res.send("產品已更新");
         }
       );
     }
@@ -441,7 +439,7 @@ app.post("/add-category", authenticateAdmin, (req, res) => {
   const sql = "INSERT INTO categories (name) VALUES (?)";
   db.query(sql, [sanitizedName], (err, result) => {
     if (err) throw err;
-    res.send("Category added");
+    res.send("類別已添加");
   });
 });
 
@@ -452,7 +450,7 @@ app.put("/update-category/:catid", authenticateAdmin, (req, res) => {
   const sql = "UPDATE categories SET name = ? WHERE catid = ?";
   db.query(sql, [sanitizedName, catid], (err, result) => {
     if (err) throw err;
-    res.send("Category updated");
+    res.send("類別已更新");
   });
 });
 
@@ -461,7 +459,7 @@ app.delete("/delete-product/:pid", authenticateAdmin, (req, res) => {
   const sql = "DELETE FROM products WHERE pid = ?";
   db.query(sql, [pid], (err, result) => {
     if (err) throw err;
-    res.send("Product deleted");
+    res.send("產品已刪除");
   });
 });
 
@@ -470,18 +468,17 @@ app.delete("/delete-category/:catid", authenticateAdmin, (req, res) => {
   const sql = "DELETE FROM categories WHERE catid = ?";
   db.query(sql, [catid], (err, result) => {
     if (err) throw err;
-    res.send("Category deleted");
+    res.send("類別已刪除");
   });
 });
 
-// 订单验证路由
+// 訂單驗證路由
 app.post("/validate-order", csrfProtection, (req, res) => {
   const { items } = req.body;
   const token = req.cookies.auth_token;
   let userId = null;
   let username = "guest";
 
-  // 验证用户（如果已登录）
   if (token) {
     jwt.verify(token, "secret_key", (err, decoded) => {
       if (!err) {
@@ -496,17 +493,16 @@ app.post("/validate-order", csrfProtection, (req, res) => {
     });
   }
 
-  // 验证产品和价格
   const pids = items.map((item) => xss(item.pid));
   const quantities = items.map((item) => parseInt(item.quantity));
   if (quantities.some((q) => q <= 0)) {
-    return res.json({ success: false, message: "Invalid quantity" });
+    return res.json({ success: false, message: "無效的數量" });
   }
 
   const sql = "SELECT pid, price FROM products WHERE pid IN (?)";
   db.query(sql, [pids], (err, results) => {
     if (err || results.length !== pids.length) {
-      return res.json({ success: false, message: "Invalid products" });
+      return res.json({ success: false, message: "無效的產品" });
     }
 
     const prices = {};
@@ -519,10 +515,9 @@ app.post("/validate-order", csrfProtection, (req, res) => {
       totalPrice += prices[item.pid] * item.quantity;
     });
 
-    // 生成摘要
     const salt = crypto.randomBytes(16).toString("hex");
     const dataToHash = [
-      "HKD",
+      "USD",
       "sb-zwa7g40564566@business.example.com",
       salt,
       ...items.map((item) => `${item.pid}:${item.quantity}:${prices[item.pid]}`),
@@ -530,11 +525,11 @@ app.post("/validate-order", csrfProtection, (req, res) => {
     ].join("|");
     const digest = crypto.createHash("sha256").update(dataToHash).digest("hex");
 
-    // 存储订单
-    const orderSql = "INSERT INTO orders (userId, username, totalPrice, digest, status) VALUES (?, ?, ?, ?, 'pending')";
-    db.query(orderSql, [userId, username, totalPrice, digest], (err, result) => {
+    const orderSql = "INSERT INTO orders (userId, username, totalPrice, digest, salt, status) VALUES (?, ?, ?, ?, ?, 'pending')";
+    db.query(orderSql, [userId, username, totalPrice, digest, salt], (err, result) => {
       if (err) {
-        return res.json({ success: false, message: "Order creation failed" });
+        console.error("訂單創建錯誤:", err);
+        return res.json({ success: false, message: "訂單創建失敗" });
       }
 
       const orderId = result.insertId;
@@ -548,7 +543,8 @@ app.post("/validate-order", csrfProtection, (req, res) => {
 
       db.query(itemSql, [itemValues], (err) => {
         if (err) {
-          return res.json({ success: false, message: "Order items creation failed" });
+          console.error("訂單項目創建錯誤:", err);
+          return res.json({ success: false, message: "訂單項目創建失敗" });
         }
         res.json({ success: true, orderId, digest });
       });
@@ -559,105 +555,94 @@ app.post("/validate-order", csrfProtection, (req, res) => {
 // PayPal Webhook 路由
 app.post("/paypal-webhook", express.raw({ type: "application/json" }), async (req, res) => {
   const webhookEvent = req.body;
-  const authAlgo = req.get("PAYPAL-AUTH-ALGO");
-  const certUrl = req.get("PAYPAL-CERT-URL");
-  const transmissionId = req.get("PAYPAL-TRANSMISSION-ID");
-  const transmissionSig = req.get("PAYPAL-TRANSMISSION-SIG");
-  const transmissionTime = req.get("PAYPAL-TRANSMISSION-TIME");
-  const webhookId = "8SF35942S85318903"; // 替换为你的 PayPal Webhook ID
 
-  // Step 1: 下载 PayPal 公钥证书
-  let certificate;
+  // 將 Webhook 數據轉為表單格式並發送 IPN 驗證請求
+  const formData = new URLSearchParams();
+  formData.append("cmd", "_notify-validate");
+  for (const key in webhookEvent) {
+    if (Object.prototype.hasOwnProperty.call(webhookEvent, key)) {
+      formData.append(key, webhookEvent[key]);
+    }
+  }
+
   try {
-    certificate = await new Promise((resolve, reject) => {
-      https.get(certUrl, (res) => {
-        let data = "";
-        res.on("data", (chunk) => (data += chunk));
-        res.on("end", () => resolve(data));
-      }).on("error", reject);
+    const response = await fetch("https://www.sandbox.paypal.com/cgi-bin/webscr", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: formData.toString(),
     });
-  } catch (err) {
-    console.error("Failed to download PayPal certificate:", err);
-    return res.status(400).send("Invalid certificate");
-  }
 
-  // Step 2: 构建签名验证数据
-  const payload = JSON.stringify(webhookEvent);
-  const message = `${transmissionId}|${transmissionTime}|${webhookId}|${crypto
-    .createHash("sha256")
-    .update(payload)
-    .digest("hex")}`;
+    const responseText = await response.text();
 
-  // Step 3: 验证签名
-  const verifier = crypto.createVerify(authAlgo);
-  verifier.update(message);
-  verifier.end();
+    if (responseText !== "VERIFIED") {
+      console.error("IPN 驗證失敗:", responseText);
+      return res.status(400).send("IPN 驗證失敗");
+    }
 
-  const isValid = verifier.verify(certificate, Buffer.from(transmissionSig, "base64"));
+    if (webhookEvent.event_type === "CHECKOUT.ORDER.APPROVED") {
+      const orderId = webhookEvent.resource.custom_id;
 
-  if (!isValid) {
-    console.error("Webhook signature verification failed");
-    return res.status(400).send("Signature verification failed");
-  }
-
-  // Step 4: 处理 Webhook 事件
-  if (webhookEvent.event_type === "CHECKOUT.ORDER.APPROVED") {
-    const orderId = webhookEvent.resource.custom_id; // 对应订单 ID
-    const paypalOrderId = webhookEvent.resource.id;
-
-    // 检查订单是否已处理
-    const checkSql = "SELECT status FROM orders WHERE orderId = ?";
-    db.query(checkSql, [orderId], (err, results) => {
-      if (err || !results.length || results[0].status !== "pending") {
-        return res.status(400).send("Order already processed or invalid");
-      }
-
-      // 获取订单详情
-      const orderSql = "SELECT * FROM orders WHERE orderId = ?";
-      db.query(orderSql, [orderId], (err, orderResults) => {
-        if (err || !orderResults.length) {
-          return res.status(400).send("Order not found");
+      const checkSql = "SELECT status FROM orders WHERE orderId = ?";
+      db.query(checkSql, [orderId], (err, results) => {
+        if (err || !results.length || results[0].status !== "pending") {
+          console.error("訂單已處理或無效:", err || results);
+          return res.status(400).send("訂單已處理或無效");
         }
 
-        const order = orderResults[0];
-        const itemsSql = "SELECT * FROM order_items WHERE orderId = ?";
-        db.query(itemsSql, [orderId], (err, itemResults) => {
-          if (err) {
-            return res.status(400).send("Order items not found");
+        const orderSql = "SELECT * FROM orders WHERE orderId = ?";
+        db.query(orderSql, [orderId], (err, orderResults) => {
+          if (err || !orderResults.length) {
+            console.error("訂單未找到:", err);
+            return res.status(400).send("訂單未找到");
           }
 
-          // 重新生成摘要
-          const salt = order.digest.substring(0, 32); // 假设 salt 是前 32 位
-          const dataToHash = [
-            order.currency,
-            "sb-zwa7g40564566@business.example.com",
-            salt,
-            ...itemResults.map((item) => `${item.pid}:${item.quantity}:${item.price}`),
-            order.totalPrice.toFixed(2),
-          ].join("|");
-          const newDigest = crypto.createHash("sha256").update(dataToHash).digest("hex");
-
-          if (newDigest !== order.digest) {
-            return res.status(400).send("Digest validation failed");
-          }
-
-          // 更新订单状态
-          const updateSql = "UPDATE orders SET status = 'completed' WHERE orderId = ?";
-          db.query(updateSql, [orderId], (err) => {
+          const order = orderResults[0];
+          const itemsSql = "SELECT * FROM order_items WHERE orderId = ?";
+          db.query(itemsSql, [orderId], (err, itemResults) => {
             if (err) {
-              return res.status(500).send("Failed to update order status");
+              console.error("訂單項目未找到:", err);
+              return res.status(400).send("訂單項目未找到");
             }
-            res.status(200).send("Webhook processed");
+
+            const dataToHash = [
+              order.currency,
+              "sb-zwa7g40564566@business.example.com",
+              order.salt,
+              ...itemResults.map((item) => `${item.pid}:${item.quantity}:${item.price}`),
+              order.totalPrice.toFixed(2),
+            ].join("|");
+            const newDigest = crypto.createHash("sha256").update(dataToHash).digest("hex");
+
+            if (newDigest !== order.digest) {
+              console.error("Digest 驗證失敗:", { newDigest, storedDigest: order.digest });
+              return res.status(400).send("Digest 驗證失敗");
+            }
+
+            const updateSql = "UPDATE orders SET status = 'completed' WHERE orderId = ?";
+            db.query(updateSql, [orderId], (err) => {
+              if (err) {
+                console.error("更新訂單狀態失敗:", err);
+                return res.status(500).send("更新訂單狀態失敗");
+              }
+              console.log("Webhook 已處理，訂單:", orderId);
+              res.status(200).send("Webhook 已處理");
+            });
           });
         });
       });
-    });
-  } else {
-    res.status(200).send("Webhook event ignored");
+    } else {
+      console.log("忽略的 Webhook 事件:", webhookEvent.event_type);
+      res.status(200).send("忽略的 Webhook 事件");
+    }
+  } catch (err) {
+    console.error("IPN 驗證錯誤:", err);
+    return res.status(500).send("IPN 驗證錯誤");
   }
 });
 
-// 获取用户订单
+// 獲取用戶訂單
 app.get("/user-orders", (req, res) => {
   const token = req.cookies.auth_token;
   if (!token) return res.status(401).json({ authenticated: false });
@@ -675,7 +660,7 @@ app.get("/user-orders", (req, res) => {
       LIMIT 5`;
     db.query(sql, [decoded.userId], (err, results) => {
       if (err) {
-        return res.status(500).json({ error: "Failed to fetch orders" });
+        return res.status(500).json({ error: "無法獲取訂單" });
       }
 
       const orders = {};
@@ -704,7 +689,7 @@ app.get("/user-orders", (req, res) => {
   });
 });
 
-// 获取所有订单（管理员）
+// 獲取所有訂單（管理員）
 app.get("/admin-orders", authenticateAdmin, (req, res) => {
   const sql = `
     SELECT o.orderId, o.username, o.totalPrice, o.status, o.createdAt, oi.pid, oi.quantity, oi.price, p.name
@@ -714,7 +699,7 @@ app.get("/admin-orders", authenticateAdmin, (req, res) => {
     ORDER BY o.createdAt DESC`;
   db.query(sql, (err, results) => {
     if (err) {
-      return res.status(500).json({ error: "Failed to fetch orders" });
+      return res.status(500).json({ error: "無法獲取訂單" });
     }
 
     const orders = {};
