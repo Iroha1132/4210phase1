@@ -635,8 +635,8 @@ app.use((err, req, res, next) => {
 
 // HTTPS Server
 const options = {
-    key: fs.readFileSync('/etc/letsencrypt/live/ierg4210.koreacentral.cloudapp.azure.com/privkey.pem'),
-    cert: fs.readFileSync('/etc/letsencrypt/live/ierg4210.koreacentral.cloudapp.azure.com/fullchain.pem')
+    key: fs.readFileSync('/etc/letsencrypt/live/ierg4210.eastasia.cloudapp.azure.com/privkey.pem'),
+    cert: fs.readFileSync('/etc/letsencrypt/live/ierg4210.eastasia.cloudapp.azure.com/fullchain.pem')
 };
 
 https.createServer(options, app).listen(443, () => {
