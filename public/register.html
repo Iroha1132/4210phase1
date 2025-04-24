@@ -1,0 +1,133 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register - Dummy Shopping Website</title>
+    <link rel="stylesheet" href="/styles/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+</head>
+<body>
+    <div class="login-wrapper">
+        <div class="login-container">
+            <h1>Create Your Account</h1>
+            <form id="register-form">
+                <input type="hidden" name="csrfToken" id="csrfToken">
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email" required placeholder="Enter your email">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required placeholder="Enter your password">
+                <label for="confirm-password">Confirm Password</label>
+                <input type="password" id="confirm-password" name="confirm-password" required placeholder="Confirm your password">
+                <div id="form-error" class="error"></div>
+                <button type="submit">Register</button>
+            </form>
+            <p class="back-link"><a href="/">Back to Home</a></p>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Handle CSRF token
+            fetch('https://ierg4210.koreacentral.cloudapp.azure.com/csrf-token', { credentials: 'include' })
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById('csrfToken').value = data.csrfToken;
+                })
+                .catch(err => console.error('CSRF fetch error:', err));
+
+            // Handle register form submission
+            document.getElementById('register-form').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const email = document.getElementById('email').value.trim();
+                const password = document.getElementById('password').value.trim();
+                const confirmPassword = document.getElementById('confirm-password').value.trim();
+
+                const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+                if (!emailRegex.test(email)) {
+                    alert('Please enter a valid email address.');
+                    return;
+                }
+                if (password.length < 8 || password.length > 50) {
+                    alert('Password must be between 8 and 50 characters long.');
+                    return;
+                }
+                if (password !== confirmPassword) {
+                    alert('Passwords do not match.');
+                    return;
+                }
+
+                try {
+                    const csrfResponse = await fetch('https://ierg4210.koreacentral.cloudapp.azure.com/csrf-token', { credentials: 'include' });
+                    const csrfData = await csrfResponse.json();
+                    document.getElementById('csrfToken').value = csrfData.csrfToken;
+
+                    const registerResponse = await fetch('https://ierg4210.koreacentral.cloudapp.azure.com/register', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email, password, csrfToken: csrfData.csrfToken }),
+                        credentials: 'include'
+                    });
+
+                    const data = await registerResponse.json();
+                    if (!registerResponse.ok) {
+                        alert(data.error || 'Registration failed. Please try again.');
+                        fetch('https://ierg4210.koreacentral.cloudapp.azure.com/csrf-token', { credentials: 'include' })
+                            .then(res => res.json())
+                            .then(data => document.getElementById('csrfToken').value = data.csrfToken);
+                        return;
+                    }
+
+                    alert('Registration successful! Please log in.');
+                    window.location.href = '/login';
+                } catch (err) {
+                    console.error('Registration error:', err);
+                    alert('An error occurred during registration. Please try again later.');
+                    fetch('https://ierg4210.koreacentral.cloudapp.azure.com/csrf-token', { credentials: 'include' })
+                        .then(res => res.json())
+                        .then(data => document.getElementById('csrfToken').value = data.csrfToken);
+                }
+            });
+        });
+    </script>
+</body>
+</html>
