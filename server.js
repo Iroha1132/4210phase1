@@ -481,7 +481,6 @@ app.post("/validate-order", csrfProtection, (req, res) => {
   let userId = null;
   let username = "guest";
 
-  // 验证用户（如果已登录）
   if (token) {
     jwt.verify(token, "secret_key", (err, decoded) => {
       if (!err) {
@@ -496,7 +495,6 @@ app.post("/validate-order", csrfProtection, (req, res) => {
     });
   }
 
-  // 验证产品和价格
   const pids = items.map((item) => xss(item.pid));
   const quantities = items.map((item) => parseInt(item.quantity));
   if (quantities.some((q) => q <= 0)) {
@@ -519,7 +517,6 @@ app.post("/validate-order", csrfProtection, (req, res) => {
       totalPrice += prices[item.pid] * item.quantity;
     });
 
-    // 生成摘要
     const salt = crypto.randomBytes(16).toString("hex");
     const dataToHash = [
       "HKD",
@@ -530,7 +527,6 @@ app.post("/validate-order", csrfProtection, (req, res) => {
     ].join("|");
     const digest = crypto.createHash("sha256").update(dataToHash).digest("hex");
 
-    // 存储订单
     const orderSql = "INSERT INTO orders (userId, username, totalPrice, digest, status) VALUES (?, ?, ?, ?, 'pending')";
     db.query(orderSql, [userId, username, totalPrice, digest], (err, result) => {
       if (err) {
@@ -550,7 +546,7 @@ app.post("/validate-order", csrfProtection, (req, res) => {
         if (err) {
           return res.json({ success: false, message: "Order items creation failed" });
         }
-        res.json({ success: true, orderId, digest });
+        res.json({ success: true, orderId, digest, totalPrice: totalPrice.toFixed(2) });
       });
     });
   });
