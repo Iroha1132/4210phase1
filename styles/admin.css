@@ -1,0 +1,289 @@
+/* General Styles */
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: #ffffff; /* White background */
+  margin: 0;
+  padding: 0;
+  color: #333; /* Dark text for contrast */
+}
+
+/* Main container (not explicitly in admin.html, but applied to body for consistency) */
+body {
+  max-width: 800px;
+  margin: 20px auto;
+  padding: 20px;
+  background-color: #ffffff; /* White container background */
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); /* Subtle shadow */
+  border-radius: 8px;
+}
+
+h1 {
+  text-align: center;
+  color: #4CAF50; /* Green color for headings */
+  font-size: 2em;
+  margin-bottom: 15px;
+}
+
+h2 {
+  color: #4CAF50; /* Green color for subheadings */
+  font-size: 1.5em;
+  margin-bottom: 10px;
+}
+
+/* Form Styles (applied to #product-form and #category-form) */
+form {
+  margin-bottom: 20px;
+  padding: 20px;
+  background-color: #f9f9f9; /* Light gray form background */
+  border-radius: 8px;
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.05); /* Subtle shadow */
+}
+
+form label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: #555; /* Dark gray for labels */
+  font-size: 0.9em;
+}
+
+form input[type="text"],
+form input[type="number"],
+form textarea,
+form select {
+  width: 60%; /* Shorter input bars */
+  padding: 10px;
+  margin-bottom: 15px;
+  border: 1px solid #ddd; /* Light border */
+  border-radius: 6px;
+  font-size: 0.9em;
+  background-color: #ffffff; /* White input background */
+  color: #333; /* Dark text for inputs */
+  transition: border-color 0.3s ease;
+}
+
+form input[type="text"]:focus,
+form input[type="number"]:focus,
+form textarea:focus,
+form select:focus {
+  border-color: #4CAF50; /* Green border on focus */
+  outline: none;
+}
+
+form textarea {
+  resize: vertical;
+  min-height: 100px;
+  width: 60%; /* Shorter textarea */
+}
+
+form input[type="file"] {
+  padding: 5px;
+  background-color: #ffffff; /* White file input background */
+  color: #333; /* Dark text for file input */
+}
+
+/* Error Message Styles */
+.error {
+  color: red;
+  font-size: 0.9em;
+  margin-bottom: 15px;
+}
+
+/* Button Styles */
+button {
+  display: inline-block;
+  padding: 10px 20px;
+  font-size: 0.9em;
+  font-weight: 600;
+  color: #fff;
+  background-color: #4CAF50; /* Green button background for submit buttons */
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+button:hover {
+  background-color: #45a049; /* Darker green on hover */
+}
+
+/* Delete Button Styles (specific to buttons inside product/category lists) */
+ul button {
+  background-color: #e74c3c; /* Red for delete button */
+  padding: 5px 10px; /* Smaller padding for delete buttons */
+}
+
+ul button:hover {
+  background-color: #c0392b; /* Darker red on hover */
+}
+
+/* List Styles */
+ul {
+  list-style-type: none;
+  padding: 0;
+}
+
+li {
+  margin: 10px 0;
+  padding: 10px;
+  border: 1px solid #ddd; /* Light border instead of #ccc */
+  border-radius: 5px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: #ffffff; /* White background for list items */
+}
+
+/* Admin Back Link */
+.admin-back-link {
+  text-align: center;
+  margin: -15px 0 20px 0;
+}
+
+.admin-back-link a {
+  display: inline-block;
+  padding: 10px 20px;
+  background-color: #007bff;
+  color: white;
+  text-decoration: none;
+  border-radius: 5px;
+  font-size: 0.9em;
+  font-weight: 600;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.admin-back-link a:hover {
+  background-color: #0056b3;
+  transform: translateY(-2px);
+  text-decoration: none;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  body {
+      padding: 15px;
+  }
+
+  h1 {
+      font-size: 1.8em;
+  }
+
+  h2 {
+      font-size: 1.3em;
+  }
+
+  form {
+      padding: 15px;
+  }
+
+  form input[type="text"],
+  form input[type="number"],
+  form textarea,
+  form select {
+      width: 100%; /* Full width on smaller screens */
+  }
+
+  button {
+      width: 100%;
+      padding: 12px;
+  }
+}
+
+/* Animation for Forms */
+form {
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+      opacity: 0;
+      transform: translateY(10px);
+  }
+  to {
+      opacity: 1;
+      transform: translateY(0);
+  }
+}
+
+/* New Section for Admin Orders List */
+
+/* Admin Orders Section */
+.admin-orders {
+  margin-top: 20px;
+  padding: 20px;
+  background-color: #f9f9f9;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.admin-orders h2 {
+  font-size: 1.6em;
+  color: #4CAF50;
+  margin-bottom: 15px;
+  text-align: center;
+}
+
+.admin-orders ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.admin-orders li {
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 15px;
+  margin-bottom: 10px;
+  background-color: #fff;
+  transition: box-shadow 0.3s ease;
+}
+
+.admin-orders li:hover {
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+.admin-orders li p {
+  margin: 5px 0;
+  font-size: 0.9em;
+  color: #555;
+}
+
+.admin-orders li p strong {
+  color: #333;
+  font-weight: 600;
+}
+
+.admin-orders .status-pending {
+  color: #f0ad4e;
+  font-weight: 600;
+}
+
+.admin-orders .status-completed {
+  color: #4CAF50;
+  font-weight: 600;
+}
+
+.admin-orders .status-failed {
+  color: #e74c3c;
+  font-weight: 600;
+}
+
+/* Responsive Design for Admin Orders */
+@media (max-width: 768px) {
+  .admin-orders {
+    padding: 15px;
+  }
+
+  .admin-orders h2 {
+    font-size: 1.4em;
+  }
+
+  .admin-orders li {
+    padding: 10px;
+  }
+
+  .admin-orders li p {
+    font-size: 0.85em;
+  }
+}
