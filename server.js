@@ -639,6 +639,6 @@ const options = {
     cert: fs.readFileSync('/etc/letsencrypt/live/ierg4210.eastasia.cloudapp.azure.com/fullchain.pem')
 };
 
-https.createServer(options, app).listen(443, () => {
-    console.log('HTTPS Server running on port 443');
+http.createServer(app).listen(3000, () => {
+    console.log('Server running on port 3000');
 });
