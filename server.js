@@ -20,9 +20,9 @@ const app = express();
 const upload = multer({ dest: 'uploads/', limits: { fileSize: 10 * 1024 * 1024 } });
 
 const db = mysql.createPool({
-    host: process.env.DB_HOST || 'localhost',
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || 'zhang1325020',
+    host: process.env.DB_HOST || 'ierg421074982.mysql.database.azure.com',
+    user: process.env.DB_USER || 'admin123',
+    password: process.env.DB_PASSWORD || '@Zhang1325020',
     database: process.env.DB_NAME || 'dummy_shop',
     waitForConnections: true,
     connectionLimit: 10,
