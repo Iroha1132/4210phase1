@@ -1,743 +1,644 @@
-const express = require("express");
-const bodyParser = require("body-parser");
-const mysql = require("mysql");
-const fetch = require("node-fetch");
-const path = require("path");
-const multer = require("multer");
-const sharp = require("sharp");
-const cors = require("cors");
-const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken");
-const xss = require("xss");
-const csrf = require("csurf");
-const cookieParser = require("cookie-parser");
-const helmet = require("helmet");
-const https = require("https");
-const fs = require("fs");
-const crypto = require("crypto");
+const express = require('express');
+const bodyParser = require('body-parser');
+const mysql = require('mysql2/promise');
+const path = require('path');
+const multer = require('multer');
+const sharp = require('sharp');
+const cors = require('cors');
+const cookieParser = require('cookie-parser');
+const crypto = require('crypto');
+const bcrypt = require('bcrypt');
+const sanitizeHtml = require('sanitize-html');
+const https = require('https');
+const fs = require('fs');
+const dotenv = require('dotenv');
+dotenv.config();
 
-const upload = multer({ dest: "uploads/" });
 const app = express();
+const upload = multer({ dest: 'uploads/', limits: { fileSize: 10 * 1024 * 1024 } });
 
-app.use(
-  helmet.contentSecurityPolicy({
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-      fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      imgSrc: [
-        "'self'",
-        "data:",
-        "https://ierg4210.eastasia.cloudapp.azure.com",
-      ],
-      connectSrc: ["'self'"],
-      frameSrc: ["'none'"],
-      objectSrc: ["'none'"],
-    },
-  })
-);
+const db = mysql.createPool({
+    host: process.env.DB_HOST || 'localhost',
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'ierg4210',
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0
+});
 
-app.use(
-  cors({
-    origin: true,
+// Middleware
+app.use(cors({
+    origin: 'https://localhost',
     credentials: true,
-  })
-);
-app.use(cookieParser());
-const csrfProtection = csrf({
-  cookie: {
-    key: "_csrf",
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
-    maxAge: 86400,
-  },
-});
-
-app.use(csrfProtection);
-app.use((req, res, next) => {
-  res.setHeader(
-    "Content-Security-Policy",
-    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
-  );
-  next();
-});
-
-const db = mysql.createConnection({
-  host: "localhost",
-  user: "root",
-  password: "zhang1325020",
-  database: "dummy_shop",
-});
-
-db.connect((err) => {
-  if (err) throw err;
-  console.log("MySQL connected");
-
-  // 更新 orders 表，添加 salt 欄位並設置貨幣為 USD
-  const updateOrdersTable = `
-    ALTER TABLE orders
-    ADD COLUMN IF NOT EXISTS salt VARCHAR(32) NULL,
-    MODIFY COLUMN currency VARCHAR(3) DEFAULT 'USD'
-  `;
-  db.query(updateOrdersTable, (err) => {
-    if (err) console.error("Failed to update orders table:", err);
-  });
-
-  // 創建 orders 表
-  const createOrdersTable = `
-    CREATE TABLE IF NOT EXISTS orders (
-      orderId INT AUTO_INCREMENT PRIMARY KEY,
-      userId INT NULL,
-      username VARCHAR(255) NULL,
-      currency VARCHAR(3) DEFAULT 'USD',
-      totalPrice DECIMAL(10,2) NOT NULL,
-      digest VARCHAR(255) NOT NULL,
-      salt VARCHAR(32) NULL,
-      status ENUM('pending', 'completed', 'failed') DEFAULT 'pending',
-      createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (userId) REFERENCES users(userid)
-    )`;
-  db.query(createOrdersTable, (err) => {
-    if (err) throw err;
-  });
-
-  // 創建 order_items 表
-  const createOrderItemsTable = `
-    CREATE TABLE IF NOT EXISTS order_items (
-      itemId INT AUTO_INCREMENT PRIMARY KEY,
-      orderId INT NOT NULL,
-      pid INT NOT NULL,
-      quantity INT NOT NULL,
-      price DECIMAL(10,2) NOT NULL,
-      FOREIGN KEY (orderId) REFERENCES orders(orderId),
-      FOREIGN KEY (pid) REFERENCES products(pid)
-    )`;
-  db.query(createOrderItemsTable, (err) => {
-    if (err) throw err;
-  });
-});
-
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token']
+}));
 app.use(bodyParser.urlencoded({ extended: false }));
-app.use(bodyParser.json({ type: "application/json" }));
-app.use(express.raw({ type: "application/json" })); // 處理 Webhook 的原始 JSON
-app.use(express.static(path.join(__dirname, "public")));
+app.use(bodyParser.json());
+app.use(cookieParser());
+app.use('/public', express.static(path.join(__dirname, 'public')));
+app.use(express.static(__dirname, { index: false }));
 
-const authenticateAdmin = (req, res, next) => {
-  const token = req.cookies.auth_token;
-  if (!token) return res.status(401).json({ authenticated: false });
+// CSRF Protection
+const generateCsrfToken = () => crypto.randomBytes(16).toString('hex');
+app.use((req, res, next) => {
+    if (!req.cookies.csrfToken) {
+        const token = generateCsrfToken();
+        res.cookie('csrfToken', token, { httpOnly: true, secure: true, sameSite: 'strict' });
+    }
+    next();
+});
 
-  jwt.verify(token, "secret_key", (err, decoded) => {
-    if (err) return res.status(401).json({ authenticated: false });
-
-    const sql = "SELECT admin_flag FROM users WHERE userid = ?";
-    db.query(sql, [decoded.userId], (err, results) => {
-      if (err || !results.length || !results[0].admin_flag) {
-        return res.status(403).json({ error: "Admin access required" });
-      }
-      req.userId = decoded.userId;
-      next();
-    });
-  });
+const validateCsrfToken = (req, res, next) => {
+    const csrfToken = req.cookies.csrfToken;
+    const bodyToken = req.body.csrfToken || req.headers['x-csrf-token'] || req.cookies.csrfToken;
+    if (!csrfToken || !bodyToken || csrfToken !== bodyToken) {
+        return res.status(403).send('CSRF token validation failed');
+    }
+    next();
 };
 
-app.get("/check-auth", (req, res) => {
-  const token = req.cookies.auth_token;
-  if (!token) return res.status(401).json({ authenticated: false });
+// Input Validation
+const validateTextInput = (text, maxLength, fieldName) => {
+    if (!text || typeof text !== 'string') return `${fieldName} is required`;
+    if (text.length > maxLength) return `${fieldName} must be ${maxLength} characters or less`;
+    if (!/^[a-zA-Z0-9\s\-,.@]+$/.test(text)) return `${fieldName} contains invalid characters`;
+    return null;
+};
 
-  jwt.verify(token, "secret_key", (err, decoded) => {
-    if (err) return res.status(401).json({ authenticated: false });
+const validatePrice = (price) => {
+    const num = parseFloat(price);
+    if (isNaN(num) || num < 0) return 'Price must be a non-negative number';
+    return null;
+};
 
-    const sql = "SELECT userid FROM users WHERE userid = ?";
-    db.query(sql, [decoded.userId], (err, results) => {
-      if (err || !results.length) {
-        return res.status(401).json({ authenticated: false });
-      }
-      res.json({ authenticated: true });
-    });
-  });
+// Escape HTML
+const escapeHtml = (text) => sanitizeHtml(text, { allowedTags: [], allowedAttributes: {} });
+
+// Authentication Middleware
+const authenticate = async (req, res, next) => {
+    try {
+        const authToken = req.cookies.authToken;
+        if (!authToken) return next();
+        
+        const [results] = await db.query('SELECT * FROM users WHERE auth_token = ?', [authToken]);
+        if (!results.length) return next();
+        
+        req.user = results[0];
+        next();
+    } catch (err) {
+        console.error('Auth error:', err);
+        res.status(500).send('Internal Server Error');
+    }
+};
+
+const isAdmin = (req, res, next) => {
+    if (!req.user || !req.user.is_admin) return res.status(403).send('Admin access required');
+    next();
+};
+
+// Routes
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-app.post("/login", (req, res) => {
-  const { email, password } = req.body;
-  const sql = "SELECT * FROM users WHERE email = ?";
-  
-  db.query(sql, [xss(email)], (err, results) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).json({ success: false, message: "伺服器錯誤" });
+app.get('/login', (req, res) => {
+    res.sendFile(path.join(__dirname, 'login.html'));
+});
+
+app.get('/register', (req, res) => {
+    res.sendFile(path.join(__dirname, 'register.html'));
+});
+
+app.get('/product', (req, res) => {
+    res.sendFile(path.join(__dirname, 'product.html'));
+});
+
+app.get('/admin', authenticate, isAdmin, (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+
+app.get('/public/admin.html', (req, res) => {
+    res.redirect('/login');
+});
+
+app.get('/user-dashboard', authenticate, (req, res) => {
+    res.sendFile(path.join(__dirname, 'user-dashboard.html'));
+});
+
+app.get('/orders', authenticate, (req, res) => {
+    res.sendFile(path.join(__dirname, 'orders.html'));
+});
+
+// API Routes
+app.get('/csrf-token', (req, res) => {
+    res.json({ csrfToken: req.cookies.csrfToken });
+});
+
+app.get('/user', async (req, res) => {
+    try {
+        const authToken = req.cookies.authToken;
+        if (!authToken) return res.json({ email: 'Guest', isAdmin: false });
+        
+        const [results] = await db.query('SELECT email, is_admin FROM users WHERE auth_token = ?', [authToken]);
+        if (!results.length) return res.json({ email: 'Guest', isAdmin: false });
+        
+        res.json({ email: results[0].email, isAdmin: results[0].is_admin });
+    } catch (err) {
+        console.error('User fetch error:', err);
+        res.status(500).send('Internal Server Error');
     }
+});
 
-    if (results.length > 0) {
-      const user = results[0];
-      if (bcrypt.compareSync(password, user.password)) {
-        const sessionId = crypto.randomBytes(16).toString('hex');
-        const token = jwt.sign({ 
-          userId: user.userid,
-          sessionId: sessionId,
-          loginSeq: crypto.randomBytes(8).toString('hex')
-        }, "secret_key", { expiresIn: "2d" });
+app.get('/categories', async (req, res) => {
+    try {
+        const [results] = await db.query('SELECT * FROM categories');
+        res.json(results.map(row => ({ catid: row.catid, name: escapeHtml(row.name) })));
+    } catch (err) {
+        console.error('Categories error:', err);
+        res.status(500).send('Internal Server Error');
+    }
+});
 
-        res.cookie("auth_token", token, {
-          httpOnly: true,
-          secure: true,
-          maxAge: 172800000,
-          sameSite: "strict"
+app.get('/products', async (req, res) => {
+    try {
+        const [results] = await db.query('SELECT * FROM products');
+        res.json(results.map(row => ({
+            pid: row.pid,
+            catid: row.catid,
+            name: escapeHtml(row.name),
+            price: row.price,
+            description: escapeHtml(row.description),
+            image: row.image,
+            thumbnail: row.thumbnail
+        })));
+    } catch (err) {
+        console.error('Products error:', err);
+        res.status(500).send('Internal Server Error');
+    }
+});
+
+app.get('/products/:catid', async (req, res) => {
+    try {
+        const [results] = await db.query('SELECT * FROM products WHERE catid = ?', [req.params.catid]);
+        res.json(results.map(row => ({
+            pid: row.pid,
+            catid: row.catid,
+            name: escapeHtml(row.name),
+            price: row.price,
+            description: escapeHtml(row.description),
+            image: row.image,
+            thumbnail: row.thumbnail
+        })));
+    } catch (err) {
+        console.error('Products by catid error:', err);
+        res.status(500).send('Internal Server Error');
+    }
+});
+
+app.get('/product/:pid', async (req, res) => {
+    try {
+        const [results] = await db.query('SELECT * FROM products WHERE pid = ?', [req.params.pid]);
+        const product = results[0] || {};
+        res.json({
+            pid: product.pid,
+            name: escapeHtml(product.name || ''),
+            price: product.price || 0,
+            description: escapeHtml(product.description || ''),
+            image: product.image || ''
         });
-
-        return res.json({
-          success: true,
-          isAdmin: user.admin_flag === 1,
-          redirect: user.admin_flag === 1 ? "/admin.html" : "/user-dashboard.html"
-        });
-      }
+    } catch (err) {
+        console.error('Product error:', err);
+        res.status(500).send('Internal Server Error');
     }
-    
-    res.status(401).json({ 
-      success: false, 
-      message: "郵箱或密碼錯誤" 
-    });
-  });
 });
 
-app.post("/logout", (req, res) => {
-  res.clearCookie("auth_token");
-  res.json({ success: true });
+app.get('/orders-data', authenticate, async (req, res) => {
+    if (!req.user) {
+        return res.status(401).json({ error: 'Not authenticated' });
+    }
+    try {
+        const [orders] = await db.query(
+            'SELECT * FROM orders WHERE user_email = ? ORDER BY created_at DESC LIMIT 5',
+            [req.user.email]
+        );
+        res.json(orders.map(order => ({
+            order_id: order.orderID,
+            email: order.user_email,
+            total_amount: order.total_price,
+            items: order.items,
+            status: order.status,
+            created_at: order.created_at
+        })));
+    } catch (err) {
+        console.error('Error fetching orders:', err);
+        res.status(500).json({ error: 'Error fetching orders' });
+    }
 });
 
-app.post("/change-password", csrfProtection, (req, res) => {
-  const token = req.cookies.auth_token;
-  if (!token) return res.status(401).json({ authenticated: false });
-
-  jwt.verify(token, "secret_key", (err, decoded) => {
-    if (err) return res.status(401).json({ authenticated: false });
-
-    const { currentPassword, newPassword } = req.body;
-    const userId = decoded.userId;
-
-    if (!currentPassword || !newPassword) {
-      return res.status(400).json({ success: false, message: "缺少必要欄位" });
-    }
-
-    if (newPassword.length < 8) {
-      return res.status(400).json({ success: false, message: "新密碼必須至少8個字符" });
-    }
-
-    const sql = "SELECT password FROM users WHERE userid = ?";
-    db.query(sql, [userId], (err, results) => {
-      if (err) {
-        console.error("資料庫錯誤:", err);
-        return res.status(500).json({ success: false, message: "伺服器錯誤" });
-      }
-
-      if (results.length === 0) {
-        return res.status(404).json({ success: false, message: "用戶未找到" });
-      }
-
-      const user = results[0];
-
-      if (!bcrypt.compareSync(currentPassword, user.password)) {
-        return res.status(401).json({ success: false, message: "當前密碼不正確" });
-      }
-
-      const hashedPassword = bcrypt.hashSync(newPassword, 10);
-
-      const updateSql = "UPDATE users SET password = ? WHERE userid = ?";
-      db.query(updateSql, [hashedPassword, userId], (err, result) => {
-        if (err) {
-          console.error("資料庫錯誤:", err);
-          return res.status(500).json({ success: false, message: "更新密碼失敗" });
+app.post('/register', validateCsrfToken, async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        const emailError = validateTextInput(email, 255, 'Email');
+        if (emailError) return res.status(400).json({ error: emailError });
+        if (!password || password.length < 8 || password.length > 50) {
+            return res.status(400).json({ error: 'Password must be between 8 and 50 characters' });
         }
 
-        res.clearCookie("auth_token");
-        res.json({ success: true, message: "密碼更改成功" });
-      });
-    });
-  });
-});
+        const [existingUsers] = await db.query('SELECT email FROM users WHERE email = ?', [email]);
+        if (existingUsers.length > 0) {
+            return res.status(400).json({ error: 'Email already exists' });
+        }
 
-app.get("/categories", (req, res) => {
-  const sql = "SELECT * FROM categories";
-  db.query(sql, (err, results) => {
-    if (err) throw err;
-    res.json(results);
-  });
-});
+        const hash = await bcrypt.hash(password, 10);
+        const authToken = crypto.randomBytes(32).toString('hex');
+        await db.query(
+            'INSERT INTO users (email, password, auth_token, is_admin) VALUES (?, ?, ?, ?)',
+            [email, hash, authToken, 0]
+        );
 
-app.get("/category/:catid", (req, res) => {
-  const catid = xss(req.params.catid);
-  const sql = "SELECT * FROM categories WHERE catid = ?";
-  db.query(sql, [catid], (err, results) => {
-    if (err) throw err;
-    res.json(results[0]);
-  });
-});
-
-app.get("/products", (req, res) => {
-  const sql = "SELECT * FROM products";
-  db.query(sql, (err, results) => {
-    if (err) throw err;
-    res.json(results);
-  });
-});
-
-app.get("/product/:pid", (req, res) => {
-  const pid = xss(req.params.pid);
-  const sql = "SELECT * FROM products WHERE pid = ?";
-  db.query(sql, [pid], (err, results) => {
-    if (err) throw err;
-    res.json(results[0]);
-  });
-});
-
-app.get("/products/:catid", (req, res) => {
-  const catid = xss(req.params.catid);
-  const sql = "SELECT * FROM products WHERE catid = ?";
-  db.query(sql, [catid], (err, results) => {
-    if (err) throw err;
-    res.json(results);
-  });
-});
-
-app.get("/csrf-token", (req, res) => {
-  res.json({ csrfToken: req.csrfToken() });
-});
-
-app.get("/user-info", (req, res) => {
-  const token = req.cookies.auth_token;
-  if (!token) return res.status(401).json({ authenticated: false });
-
-  jwt.verify(token, "secret_key", (err, decoded) => {
-    if (err) return res.status(401).json({ authenticated: false });
-
-    const sql = "SELECT email, admin_flag FROM users WHERE userid = ?";
-    db.query(sql, [decoded.userId], (err, results) => {
-      if (err || !results.length) {
-        return res.status(404).json({ error: "用戶未找到" });
-      }
-      res.json({
-        email: results[0].email,
-        isAdmin: results[0].admin_flag === 1,
-      });
-    });
-  });
-});
-
-app.get("/check-admin", authenticateAdmin, (req, res) => {
-  const sql = "SELECT admin_flag FROM users WHERE userid = ?";
-  db.query(sql, [req.userId], (err, results) => {
-    if (err || !results.length) {
-      return res.status(403).json({ isAdmin: false });
-    }
-    res.json({ isAdmin: results[0].admin_flag === 1 });
-  });
-});
-
-app.post(
-  "/add-product",
-  upload.single("image"),
-  authenticateAdmin,
-  (req, res) => {
-    const { catid, name, price, description } = req.body;
-    const sanitizedName = xss(name);
-    const sanitizedDescription = xss(description);
-    const imagePath = req.file ? req.file.path : null;
-
-    if (imagePath) {
-      sharp(imagePath)
-        .resize(200, 200)
-        .toFile(`uploads/thumbnail-${req.file.filename}`, (err) => {
-          if (err) throw err;
-          const thumbnailPath = `uploads/thumbnail-${req.file.filename}`;
-          const sql =
-            "INSERT INTO products (catid, name, price, description, image, thumbnail) VALUES (?, ?, ?, ?, ?, ?)";
-          db.query(
-            sql,
-            [
-              xss(catid),
-              sanitizedName,
-              xss(price),
-              sanitizedDescription,
-              imagePath,
-              thumbnailPath,
-            ],
-            (err, result) => {
-              if (err) throw err;
-              res.send("產品已添加");
-            }
-          );
+        res.cookie('authToken', authToken, {
+            httpOnly: true,
+            secure: true,
+            sameSite: 'strict',
+            maxAge: 2 * 24 * 60 * 60 * 1000,
+            path: '/'
         });
-    } else {
-      const sql =
-        "INSERT INTO products (catid, name, price, description) VALUES (?, ?, ?, ?)";
-      db.query(
-        sql,
-        [xss(catid), sanitizedName, xss(price), sanitizedDescription],
-        (err, result) => {
-          if (err) throw err;
-          res.send("產品已添加");
-        }
-      );
+
+        res.json({ success: true, redirect: '/login' });
+    } catch (err) {
+        console.error('Registration error:', err);
+        res.status(500).json({ error: 'Internal Server Error' });
     }
-  }
-);
+});
 
-app.put(
-  "/update-product/:pid",
-  upload.single("image"),
-  authenticateAdmin,
-  (req, res) => {
-    const pid = xss(req.params.pid);
-    const { catid, name, price, description } = req.body;
-    const sanitizedName = xss(name);
-    const sanitizedDescription = xss(description);
-    const imagePath = req.file ? req.file.path : null;
+app.post('/login', validateCsrfToken, async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        const emailError = validateTextInput(email, 255, 'Email');
+        if (emailError) return res.status(400).json({ error: emailError });
+        if (!password || password.length < 8) {
+            return res.status(400).json({ error: 'Password must be at least 8 characters' });
+        }
 
-    if (imagePath) {
-      sharp(imagePath)
-        .resize(200, 200)
-        .toFile(`uploads/thumbnail-${req.file.filename}`, (err) => {
-          if (err) throw err;
-          const thumbnailPath = `uploads/thumbnail-${req.file.filename}`;
-          const sql =
-            "UPDATE products SET catid = ?, name = ?, price = ?, description = ?, image = ?, thumbnail = ? WHERE pid = ?";
-          db.query(
-            sql,
-            [
-              xss(catid),
-              sanitizedName,
-              xss(price),
-              sanitizedDescription,
-              imagePath,
-              thumbnailPath,
-              pid,
-            ],
-            (err, result) => {
-              if (err) throw err;
-              res.send("產品已更新");
-            }
-          );
+        const [users] = await db.query('SELECT * FROM users WHERE email = ?', [email]);
+        if (users.length === 0) {
+            return res.status(401).json({ error: 'Invalid credentials' });
+        }
+
+        const user = users[0];
+        const match = await bcrypt.compare(password, user.password);
+        if (!match) {
+            return res.status(401).json({ error: 'Invalid credentials' });
+        }
+
+        const authToken = crypto.randomBytes(32).toString('hex');
+        await db.query('UPDATE users SET auth_token = ? WHERE userid = ?', [authToken, user.userid]);
+
+        res.cookie('authToken', authToken, {
+            httpOnly: true,
+            secure: true,
+            sameSite: 'strict',
+            maxAge: 2 * 24 * 60 * 60 * 1000,
+            path: '/'
         });
-    } else {
-      const sql =
-        "UPDATE products SET catid = ?, name = ?, price = ?, description = ? WHERE pid = ?";
-      db.query(
-        sql,
-        [xss(catid), sanitizedName, xss(price), sanitizedDescription, pid],
-        (err, result) => {
-          if (err) throw err;
-          res.send("產品已更新");
-        }
-      );
-    }
-  }
-);
 
-app.post("/add-category", authenticateAdmin, (req, res) => {
-  const { name } = req.body;
-  const sanitizedName = xss(name);
-  const sql = "INSERT INTO categories (name) VALUES (?)";
-  db.query(sql, [sanitizedName], (err, result) => {
-    if (err) throw err;
-    res.send("類別已添加");
-  });
-});
-
-app.put("/update-category/:catid", authenticateAdmin, (req, res) => {
-  const catid = xss(req.params.catid);
-  const { name } = req.body;
-  const sanitizedName = xss(name);
-  const sql = "UPDATE categories SET name = ? WHERE catid = ?";
-  db.query(sql, [sanitizedName, catid], (err, result) => {
-    if (err) throw err;
-    res.send("類別已更新");
-  });
-});
-
-app.delete("/delete-product/:pid", authenticateAdmin, (req, res) => {
-  const pid = xss(req.params.pid);
-  const sql = "DELETE FROM products WHERE pid = ?";
-  db.query(sql, [pid], (err, result) => {
-    if (err) throw err;
-    res.send("產品已刪除");
-  });
-});
-
-app.delete("/delete-category/:catid", authenticateAdmin, (req, res) => {
-  const catid = xss(req.params.catid);
-  const sql = "DELETE FROM categories WHERE catid = ?";
-  db.query(sql, [catid], (err, result) => {
-    if (err) throw err;
-    res.send("類別已刪除");
-  });
-});
-
-// 訂單驗證路由
-app.post("/validate-order", csrfProtection, (req, res) => {
-  const { items } = req.body;
-  const token = req.cookies.auth_token;
-  let userId = null;
-  let username = "guest";
-
-  if (token) {
-    jwt.verify(token, "secret_key", (err, decoded) => {
-      if (!err) {
-        userId = decoded.userId;
-        const sql = "SELECT email FROM users WHERE userid = ?";
-        db.query(sql, [userId], (err, results) => {
-          if (!err && results.length > 0) {
-            username = results[0].email;
-          }
+        res.json({ 
+            role: user.is_admin ? 'admin' : 'user',
+            redirect: user.is_admin ? '/admin' : '/',
+            email: user.email
         });
-      }
-    });
-  }
-
-  const pids = items.map((item) => xss(item.pid));
-  const quantities = items.map((item) => parseInt(item.quantity));
-  if (quantities.some((q) => q <= 0)) {
-    return res.json({ success: false, message: "無效的數量" });
-  }
-
-  const sql = "SELECT pid, price FROM products WHERE pid IN (?)";
-  db.query(sql, [pids], (err, results) => {
-    if (err || results.length !== pids.length) {
-      return res.json({ success: false, message: "無效的產品" });
+    } catch (err) {
+        console.error('Login error:', err);
+        res.status(500).json({ error: 'Internal Server Error' });
     }
-
-    const prices = {};
-    results.forEach((row) => {
-      prices[row.pid] = row.price;
-    });
-
-    let totalPrice = 0;
-    items.forEach((item) => {
-      totalPrice += prices[item.pid] * item.quantity;
-    });
-
-    const salt = crypto.randomBytes(16).toString("hex");
-    const dataToHash = [
-      "USD",
-      "sb-7vfg240731629@business.example.com",
-      salt,
-      ...items.map((item) => `${item.pid}:${item.quantity}:${prices[item.pid]}`),
-      totalPrice.toFixed(2),
-    ].join("|");
-    const digest = crypto.createHash("sha256").update(dataToHash).digest("hex");
-
-    const orderSql = "INSERT INTO orders (userId, username, totalPrice, digest, salt, status) VALUES (?, ?, ?, ?, ?, 'pending')";
-    db.query(orderSql, [userId, username, totalPrice, digest, salt], (err, result) => {
-      if (err) {
-        console.error("訂單創建錯誤:", err);
-        return res.json({ success: false, message: "訂單創建失敗" });
-      }
-
-      const orderId = result.insertId;
-      const itemSql = "INSERT INTO order_items (orderId, pid, quantity, price) VALUES ?";
-      const itemValues = items.map((item) => [
-        orderId,
-        item.pid,
-        item.quantity,
-        prices[item.pid],
-      ]);
-
-      db.query(itemSql, [itemValues], (err) => {
-        if (err) {
-          console.error("訂單項目創建錯誤:", err);
-          return res.json({ success: false, message: "訂單項目創建失敗" });
-        }
-        res.json({ success: true, orderId, digest });
-      });
-    });
-  });
 });
 
-// PayPal Webhook 路由
-app.post("/paypal-webhook", express.raw({ type: "application/json" }), async (req, res) => {
-  const webhookEvent = req.body;
-
-  // 將 Webhook 數據轉為表單格式並發送 IPN 驗證請求
-  const formData = new URLSearchParams();
-  formData.append("cmd", "_notify-validate");
-  for (const key in webhookEvent) {
-    if (Object.prototype.hasOwnProperty.call(webhookEvent, key)) {
-      formData.append(key, webhookEvent[key]);
+app.post('/logout', validateCsrfToken, authenticate, async (req, res) => {
+    try {
+        await db.query('UPDATE users SET auth_token = NULL WHERE userid = ?', [req.user.userid]);
+        res.clearCookie('authToken');
+        res.clearCookie('csrfToken');
+        const newCsrfToken = generateCsrfToken();
+        res.cookie('csrfToken', newCsrfToken, { httpOnly: true, secure: true, sameSite: 'strict' });
+        res.json({ success: true, redirect: '/login', csrfToken: newCsrfToken });
+    } catch (err) {
+        console.error('Logout error:', err);
+        res.status(500).json({ error: 'Internal Server Error' });
     }
-  }
+});
 
-  try {
-    const response = await fetch("https://www.sandbox.paypal.com/cgi-bin/webscr", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: formData.toString(),
-    });
-
-    const responseText = await response.text();
-
-    if (responseText !== "VERIFIED") {
-      console.error("IPN 驗證失敗:", responseText);
-      return res.status(400).send("IPN 驗證失敗");
-    }
-
-    if (webhookEvent.event_type === "CHECKOUT.ORDER.APPROVED") {
-      const orderId = webhookEvent.resource.custom_id;
-
-      const checkSql = "SELECT status FROM orders WHERE orderId = ?";
-      db.query(checkSql, [orderId], (err, results) => {
-        if (err || !results.length || results[0].status !== "pending") {
-          console.error("訂單已處理或無效:", err || results);
-          return res.status(400).send("訂單已處理或無效");
+app.post('/change-password', validateCsrfToken, authenticate, async (req, res) => {
+    try {
+        const { currentPassword, newPassword } = req.body;
+        if (!currentPassword || !newPassword || newPassword.length < 8) {
+            return res.status(400).send('Invalid input: New password must be at least 8 characters');
         }
 
-        const orderSql = "SELECT * FROM orders WHERE orderId = ?";
-        db.query(orderSql, [orderId], (err, orderResults) => {
-          if (err || !orderResults.length) {
-            console.error("訂單未找到:", err);
-            return res.status(400).send("訂單未找到");
-          }
+        const match = await bcrypt.compare(currentPassword, req.user.password);
+        if (!match) return res.status(401).send('Current password incorrect');
+        
+        const hash = await bcrypt.hash(newPassword, 10);
+        await db.query('UPDATE users SET password = ?, auth_token = NULL WHERE userid = ?', [hash, req.user.userid]);
+        
+        res.clearCookie('authToken');
+        res.clearCookie('csrfToken');
+        res.redirect('/login');
+    } catch (err) {
+        console.error('Password change error:', err);
+        res.status(500).send('Internal Server Error');
+    }
+});
 
-          const order = orderResults[0];
-          const itemsSql = "SELECT * FROM order_items WHERE orderId = ?";
-          db.query(itemsSql, [orderId], (err, itemResults) => {
-            if (err) {
-              console.error("訂單項目未找到:", err);
-              return res.status(400).send("訂單項目未找到");
+app.post('/validate-order', validateCsrfToken, authenticate, async (req, res) => {
+    try {
+        const { items } = req.body;
+        if (!items || !Array.isArray(items)) {
+            return res.status(400).json({ error: 'Invalid items' });
+        }
+
+        const connection = await db.getConnection();
+        try {
+            let totalPrice = 0;
+            const orderItems = [];
+            const currency = 'USD';
+            const merchantEmail = 'testing6070@example.com';
+            const salt = crypto.randomBytes(16).toString('hex');
+
+            for (const item of items) {
+                if (!item.pid || !Number.isInteger(item.quantity) || item.quantity <= 0) {
+                    throw new Error('Invalid item data');
+                }
+
+                const [products] = await connection.query('SELECT pid, price FROM products WHERE pid = ?', [item.pid]);
+                if (products.length === 0) {
+                    throw new Error(`Product ${item.pid} not found`);
+                }
+
+                const product = products[0];
+                totalPrice += product.price * item.quantity;
+                orderItems.push({
+                    pid: item.pid,
+                    quantity: item.quantity,
+                    price: product.price
+                });
             }
 
             const dataToHash = [
-              order.currency,
-              "sb-7vfg240731629@business.example.com",
-              order.salt,
-              ...itemResults.map((item) => `${item.pid}:${item.quantity}:${item.price}`),
-              order.totalPrice.toFixed(2),
-            ].join("|");
-            const newDigest = crypto.createHash("sha256").update(dataToHash).digest("hex");
+                currency,
+                merchantEmail,
+                salt,
+                ...orderItems.map(item => `${item.pid}:${item.quantity}:${item.price}`)
+            ].join('|');
+            const digest = crypto.createHash('sha256').update(dataToHash).digest('hex');
 
-            if (newDigest !== order.digest) {
-              console.error("Digest 驗證失敗:", { newDigest, storedDigest: order.digest });
-              return res.status(400).send("Digest 驗證失敗");
-            }
+            const userEmail = req.user ? req.user.email : null;
+            const [result] = await connection.query(
+                'INSERT INTO orders (user_email, items, total_price, digest, salt, status) VALUES (?, ?, ?, ?, ?, ?)',
+                [userEmail, JSON.stringify(orderItems), totalPrice, digest, salt, 'pending']
+            );
 
-            const updateSql = "UPDATE orders SET status = 'completed' WHERE orderId = ?";
-            db.query(updateSql, [orderId], (err) => {
-              if (err) {
-                console.error("更新訂單狀態失敗:", err);
-                return res.status(500).send("更新訂單狀態失敗");
-              }
-              console.log("Webhook 已處理，訂單:", orderId);
-              res.status(200).send("Webhook 已處理");
+            connection.release();
+            res.json({ orderID: result.insertId, digest });
+        } catch (err) {
+            connection.release();
+            res.status(400).json({ error: err.message });
+        }
+    } catch (err) {
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+app.post('/paypal-webhook', async (req, res) => {
+    try {
+        const verificationUrl = 'https://www.sandbox.paypal.com/cgi-bin/webscr?cmd=_notify-validate';
+        const verificationBody = `cmd=_notify-validate&${new URLSearchParams(req.body).toString()}`;
+        const verificationResponse = await fetch(verificationUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: verificationBody
+        });
+        const verificationResult = await verificationResponse.text();
+
+        if (verificationResult !== 'VERIFIED') {
+            return res.status(400).send('Invalid PayPal notification');
+        }
+
+        const paypalTxnId = req.body.txn_id;
+        const [existing] = await db.query('SELECT transaction_id FROM transactions WHERE paypal_txn_id = ?', [paypalTxnId]);
+        if (existing.length > 0) {
+            return res.status(200).send('OK');
+        }
+
+        const orderID = parseInt(req.body.invoice);
+        const [orders] = await db.query('SELECT * FROM orders WHERE orderID = ?', [orderID]);
+        if (orders.length === 0) {
+            return res.status(400).send('Order not found');
+        }
+
+        const order = orders[0];
+        const orderItems = typeof order.items === 'string' ? JSON.parse(order.items) : order.items;
+
+        const currency = 'USD';
+        const merchantEmail = 'testing6070@example.com';
+        const salt = order.salt;
+        const dataToHash = [
+            currency,
+            merchantEmail,
+            salt,
+            ...orderItems.map(item => `${item.pid}:${item.quantity}:${item.price}`)
+        ].join('|');
+        const regeneratedDigest = crypto.createHash('sha256').update(dataToHash).digest('hex');
+
+        if (regeneratedDigest !== order.digest) {
+            return res.status(400).send('Digest validation failed');
+        }
+
+        await db.query(
+            'INSERT INTO transactions (orderID, paypal_txn_id, payment_status, payment_amount, currency_code, payer_email, created_at, items) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [
+                orderID,
+                paypalTxnId,
+                req.body.payment_status,
+                parseFloat(req.body.mc_gross),
+                req.body.mc_currency,
+                req.body.payer_email,
+                new Date(),
+                JSON.stringify(orderItems)
+            ]
+        );
+
+        const status = req.body.payment_status === 'Completed' ? 'completed' : 'failed';
+        await db.query('UPDATE orders SET status = ? WHERE orderID = ?', [status, orderID]);
+
+        res.status(200).send('OK');
+    } catch (err) {
+        console.error('Webhook error:', err);
+        res.status(500).send('Internal Server Error');
+    }
+});
+
+app.post('/add-product', validateCsrfToken, authenticate, isAdmin, upload.single('image'), async (req, res) => {
+    const { catid, name, price, description } = req.body;
+    const imagePath = req.file ? `/uploads/${req.file.filename}` : null;
+
+    const nameError = validateTextInput(name, 255, 'Product name');
+    const descError = validateTextInput(description, 1000, 'Description');
+    const priceError = validatePrice(price);
+    if (nameError || descError || priceError || !catid) {
+        return res.status(400).send(nameError || descError || priceError || 'Category ID is required');
+    }
+
+    const sanitizedName = sanitizeHtml(name);
+    const sanitizedDesc = sanitizeHtml(description);
+
+    if (imagePath) {
+        if (!['image/jpeg', 'image/png', 'image/gif'].includes(req.file.mimetype)) {
+            return res.status(400).send('Invalid image type. Only JPEG, PNG, or GIF allowed.');
+        }
+
+        sharp(req.file.path)
+            .resize(200, 200)
+            .toFile(`uploads/thumbnail-${req.file.filename}`, (err) => {
+                if (err) {
+                    console.error('Image resize error:', err);
+                    return res.status(500).send('Internal Server Error');
+                }
+                const thumbnailPath = `/uploads/thumbnail-${req.file.filename}`;
+                const sql = 'INSERT INTO products (catid, name, price, description, image, thumbnail) VALUES (?, ?, ?, ?, ?, ?)';
+                db.query(sql, [catid, sanitizedName, price, sanitizedDesc, imagePath, thumbnailPath], (err) => {
+                    if (err) {
+                        console.error('Add product error:', err);
+                        return res.status(500).send('Internal Server Error');
+                    }
+                    res.send('Product added');
+                });
             });
-          });
-        });
-      });
     } else {
-      console.log("忽略的 Webhook 事件:", webhookEvent.event_type);
-      res.status(200).send("忽略的 Webhook 事件");
-    }
-  } catch (err) {
-    console.error("IPN 驗證錯誤:", err);
-    return res.status(500).send("IPN 驗證錯誤");
-  }
-});
-
-// 獲取用戶訂單
-app.get("/user-orders", (req, res) => {
-  const token = req.cookies.auth_token;
-  if (!token) return res.status(401).json({ authenticated: false });
-
-  jwt.verify(token, "secret_key", (err, decoded) => {
-    if (err) return res.status(401).json({ authenticated: false });
-
-    const sql = `
-      SELECT o.orderId, o.totalPrice, o.status, o.createdAt, oi.pid, oi.quantity, oi.price, p.name
-      FROM orders o
-      LEFT JOIN order_items oi ON o.orderId = oi.orderId
-      LEFT JOIN products p ON oi.pid = p.pid
-      WHERE o.userId = ?
-      ORDER BY o.createdAt DESC
-      LIMIT 5`;
-    db.query(sql, [decoded.userId], (err, results) => {
-      if (err) {
-        return res.status(500).json({ error: "無法獲取訂單" });
-      }
-
-      const orders = {};
-      results.forEach((row) => {
-        if (!orders[row.orderId]) {
-          orders[row.orderId] = {
-            orderId: row.orderId,
-            totalPrice: row.totalPrice,
-            status: row.status,
-            createdAt: row.createdAt,
-            items: [],
-          };
-        }
-        if (row.pid) {
-          orders[row.orderId].items.push({
-            pid: row.pid,
-            name: row.name,
-            price: row.price,
-            quantity: row.quantity,
-          });
-        }
-      });
-
-      res.json(Object.values(orders));
-    });
-  });
-});
-
-// 獲取所有訂單（管理員）
-app.get("/admin-orders", authenticateAdmin, (req, res) => {
-  const sql = `
-    SELECT o.orderId, o.username, o.totalPrice, o.status, o.createdAt, oi.pid, oi.quantity, oi.price, p.name
-    FROM orders o
-    LEFT JOIN order_items oi ON o.orderId = oi.orderId
-    LEFT JOIN products p ON oi.pid = p.pid
-    ORDER BY o.createdAt DESC`;
-  db.query(sql, (err, results) => {
-    if (err) {
-      return res.status(500).json({ error: "無法獲取訂單" });
-    }
-
-    const orders = {};
-    results.forEach((row) => {
-      if (!orders[row.orderId]) {
-        orders[row.orderId] = {
-          orderId: row.orderId,
-          username: row.username,
-          totalPrice: row.totalPrice,
-          status: row.status,
-          createdAt: row.createdAt,
-          items: [],
-        };
-      }
-      if (row.pid) {
-        orders[row.orderId].items.push({
-          pid: row.pid,
-          name: row.name,
-          price: row.price,
-          quantity: row.quantity,
+        const sql = 'INSERT INTO products (catid, name, price, description) VALUES (?, ?, ?, ?)';
+        db.query(sql, [catid, sanitizedName, price, sanitizedDesc], (err) => {
+            if (err) {
+                console.error('Add product error:', err);
+                return res.status(500).send('Internal Server Error');
+            }
+            res.send('Product added');
         });
-      }
-    });
-
-    res.json(Object.values(orders));
-  });
+    }
 });
 
+app.put('/update-product/:pid', validateCsrfToken, authenticate, isAdmin, upload.single('image'), async (req, res) => {
+    const { catid, name, price, description } = req.body;
+    const pid = req.params.pid;
+    const imagePath = req.file ? `/uploads/${req.file.filename}` : null;
+
+    const nameError = validateTextInput(name, 255, 'Product name');
+    const descError = validateTextInput(description, 1000, 'Description');
+    const priceError = validatePrice(price);
+    if (nameError || descError || priceError || !catid) {
+        return res.status(400).send(nameError || descError || priceError || 'Category ID is required');
+    }
+
+    const sanitizedName = sanitizeHtml(name);
+    const sanitizedDesc = sanitizeHtml(description);
+
+    if (imagePath) {
+        if (!['image/jpeg', 'image/png', 'image/gif'].includes(req.file.mimetype)) {
+            return res.status(400).send('Invalid image type. Only JPEG, PNG, or GIF allowed.');
+        }
+
+        sharp(req.file.path)
+            .resize(200, 200)
+            .toFile(`uploads/thumbnail-${req.file.filename}`, (err) => {
+                if (err) {
+                    console.error('Image resize error:', err);
+                    return res.status(500).send('Internal Server Error');
+                }
+                const thumbnailPath = `/uploads/thumbnail-${req.file.filename}`;
+                const sql = 'UPDATE products SET catid=?, name=?, price=?, description=?, image=?, thumbnail=? WHERE pid=?';
+                db.query(sql, [catid, sanitizedName, price, sanitizedDesc, imagePath, thumbnailPath, pid], (err) => {
+                    if (err) {
+                        console.error('Update product error:', err);
+                        return res.status(500).send('Internal Server Error');
+                    }
+                    res.send('Product updated');
+                });
+            });
+    } else {
+        const sql = 'UPDATE products SET catid=?, name=?, price=?, description=? WHERE pid=?';
+        db.query(sql, [catid, sanitizedName, price, sanitizedDesc, pid], (err) => {
+            if (err) {
+                console.error('Update product error:', err);
+                return res.status(500).send('Internal Server Error');
+            }
+            res.send('Product updated');
+        });
+    }
+});
+
+app.post('/add-category', validateCsrfToken, authenticate, isAdmin, async (req, res) => {
+    const { name } = req.body;
+    const nameError = validateTextInput(name, 255, 'Category name');
+    if (nameError) return res.status(400).send(nameError);
+
+    const sanitizedName = sanitizeHtml(name);
+    db.query('INSERT INTO categories (name) VALUES (?)', [sanitizedName], (err) => {
+        if (err) {
+            console.error('Add category error:', err);
+            return res.status(500).send('Internal Server Error');
+        }
+        res.send('Category added');
+    });
+});
+
+app.put('/update-category/:catid', validateCsrfToken, authenticate, isAdmin, async (req, res) => {
+    const { name } = req.body;
+    const catid = req.params.catid;
+    const nameError = validateTextInput(name, 255, 'Category name');
+    if (nameError) return res.status(400).send(nameError);
+
+    const sanitizedName = sanitizeHtml(name);
+    db.query('UPDATE categories SET name=? WHERE catid=?', [sanitizedName, catid], (err) => {
+        if (err) {
+            console.error('Update category error:', err);
+            return res.status(500).send('Internal Server Error');
+        }
+        res.send('Category updated');
+    });
+});
+
+app.delete('/delete-product/:pid', validateCsrfToken, authenticate, isAdmin, (req, res) => {
+    db.query('DELETE FROM products WHERE pid = ?', [req.params.pid], (err) => {
+        if (err) {
+            console.error('Delete product error:', err);
+            return res.status(500).send('Internal Server Error');
+        }
+        res.send('Product deleted');
+    });
+});
+
+app.delete('/delete-category/:catid', validateCsrfToken, authenticate, isAdmin, (req, res) => {
+    db.query('DELETE FROM categories WHERE catid = ?', [req.params.catid], (err) => {
+        if (err) {
+            console.error('Delete category error:', err);
+            return res.status(500).send('Internal Server Error');
+        }
+        res.send('Category deleted');
+    });
+});
+
+// Error handler
+app.use((err, req, res, next) => {
+    console.error('Server error:', err.stack);
+    res.status(500).send('Internal Server Error');
+});
+
+// HTTPS Server
 const options = {
-  key: fs.readFileSync(
-    "/etc/letsencrypt/live/ierg4210.eastasia.cloudapp.azure.com/privkey.pem"
-  ),
-  cert: fs.readFileSync(
-    "/etc/letsencrypt/live/ierg4210.eastasia.cloudapp.azure.com/fullchain.pem"
-  ),
+    key: fs.readFileSync('/etc/letsencrypt/live/ierg4210.koreacentral.cloudapp.azure.com/privkey.pem'),
+    cert: fs.readFileSync('/etc/letsencrypt/live/ierg4210.koreacentral.cloudapp.azure.com/fullchain.pem')
 };
 
-app.listen(3000, "127.0.0.1", () => {
-  console.log("Node.js running on http://localhost:3000");
+https.createServer(options, app).listen(443, () => {
+    console.log('HTTPS Server running on port 443');
 });
