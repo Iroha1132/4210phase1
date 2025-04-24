@@ -1,43 +1,44 @@
 <script type="text/javascript">
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function filledCell(cell) {
-          return cell !== '' && cell != null;
-        }
-        function loadFileData(filename) {
-        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-            try {
-                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                var firstSheetName = workbook.SheetNames[0];
-                var worksheet = workbook.Sheets[firstSheetName];
+  var gk_isXlsx = false;
+  var gk_xlsxFileLookup = {};
+  var gk_fileData = {};
+  function filledCell(cell) {
+    return cell !== '' && cell != null;
+  }
+  function loadFileData(filename) {
+    if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+      try {
+        var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+        var firstSheetName = workbook.SheetNames[0];
+        var worksheet = workbook.Sheets[firstSheetName];
 
-                // Convert sheet to JSON to filter blank rows
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                // Filter out blank rows (rows where all cells are empty, null, or undefined)
-                var filteredData = jsonData.filter(row => row.some(filledCell));
+        // Convert sheet to JSON to filter blank rows
+        var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+        // Filter out blank rows (rows where all cells are empty, null, or undefined)
+        var filteredData = jsonData.filter(row => row.some(filledCell));
 
-                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
-                var headerRowIndex = filteredData.findIndex((row, index) =>
-                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                );
-                // Fallback
-                if (headerRowIndex === -1 || headerRowIndex > 25) {
-                  headerRowIndex = 0;
-                }
+        // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+        var headerRowIndex = filteredData.findIndex((row, index) =>
+          row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+        );
+        // Fallback
+        if (headerRowIndex === -1 || headerRowIndex > 25) {
+          headerRowIndex = 0;
+        }
 
-                // Convert filtered JSON back to CSV
-                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
-                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                return csv;
-            } catch (e) {
-                console.error(e);
-                return "";
-            }
-        }
-        return gk_fileData[filename] || "";
-        }
-        </script><!DOCTYPE html>
+        // Convert filtered JSON back to CSV
+        var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+        csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+        return csv;
+      } catch (e) {
+        console.error(e);
+        return "";
+      }
+    }
+    return gk_fileData[filename] || "";
+  }
+</script>
+<!DOCTYPE html>
 <html lang="en">
 
 <head>
@@ -70,7 +71,7 @@
     </nav>
     <div id="user-status" class="user-status">
       <span id="user-email">Guest</span>
-    </div>
+      </751>
   </header>
 
   <main>
@@ -130,11 +131,20 @@
 
     <section class="shopping-list">
       <h2>Shopping List</h2>
-      <div class="cart-items" id="cart-items">
-        <!-- 动态生成购物车项目 -->
-      </div>
-      <input type="hidden" id="csrf-token" name="_csrf">
-      <div id="paypal-button-container"></div>
+      <form id="paypal-form" action="https://www.sandbox.paypal.com/cgi-bin/webscr" method="post">
+        <input type="hidden" name="cmd" value="_cart">
+        <input type="hidden" name="upload" value="1">
+        <input type="hidden" name="business" value="sb-zwa7g40564566@business.example.com">
+        <input type="hidden" name="charset" value="utf-8">
+        <input type="hidden" name="currency_code" value="HKD">
+        <input type="hidden" name="invoice" id="invoice">
+        <input type="hidden" name="custom" id="custom">
+        <input type="hidden" id="csrf-token" name="_csrf">
+        <div class="cart-items" id="cart-items">
+          <!-- 动态生成购物车项目 -->
+        </div>
+        <button type="submit" class="checkout">Checkout with PayPal</button>
+      </form>
     </section>
   </main>
 
@@ -142,8 +152,6 @@
     <p>&copy; 2024 Dummy Shopping Website</p>
   </footer>
 
-  <!-- 引入 PayPal JavaScript SDK -->
-  <script src="https://www.paypal.com/sdk/js?client-id=YOUR_PAYPAL_CLIENT_ID&currency=HKD"></script>
   <script>
     function getCookie(name) {
       const value = `; ${document.cookie}`;
@@ -244,10 +252,14 @@
         const cartItem = document.createElement("div");
         cartItem.className = "cart-item";
         cartItem.innerHTML = `
-          <input type="number" value="${item.quantity}" min="1" data-pid="${item.pid}">
-          <span>${item.name} - ${price} HKD</span>
-          <button class="remove-item" data-pid="${item.pid}">Remove</button>
-        `;
+      <input type="hidden" name="item_name_${index + 1}" value="${item.name}">
+      <input type="hidden" name="item_number_${index + 1}" value="${item.pid}">
+      <input type="hidden" name="quantity_${index + 1}" value="${item.quantity}">
+      <input type="hidden" name="amount_${index + 1}" value="${price}">
+      <input type="number" value="${item.quantity}" min="1" data-pid="${item.pid}">
+      <span>${item.name} - ${price} HKD</span>
+      <button class="remove-item" data-pid="${item.pid}">Remove</button>
+    `;
         cartItems.appendChild(cartItem);
       });
       const totalElement = document.createElement("div");
@@ -282,64 +294,72 @@
       }
     });
 
-    // 渲染 PayPal 按钮
-    paypal.Buttons({
-      createOrder: function(data, actions) {
-        const cart = JSON.parse(localStorage.getItem("cart")) || [];
-        if (cart.length === 0) {
-          alert("Your cart is empty!");
-          return;
-        }
-
-        const items = cart.map((item) => ({
-          pid: item.pid,
-          quantity: item.quantity,
-        }));
-
-        return fetch("/create-paypal-order", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-CSRF-Token": document.getElementById("csrf-token").value,
-          },
-          credentials: "include",
-          body: JSON.stringify({ items }),
-        })
-          .then((response) => response.json())
-          .then((orderData) => {
-            if (orderData.id) {
-              return orderData.id;
-            } else {
-              throw new Error("Order creation failed: " + orderData.message);
-            }
-          });
-      },
-      onApprove: function(data, actions) {
-        return fetch("/capture-paypal-order", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-CSRF-Token": document.getElementById("csrf-token").value,
-          },
-          credentials: "include",
-          body: JSON.stringify({ orderID: data.orderID }),
-        })
-          .then((response) => response.json())
-          .then((captureData) => {
-            if (captureData.success) {
-              alert("Payment successful!");
-              localStorage.removeItem("cart");
-              updateCartUI();
-            } else {
-              alert("Payment capture failed: " + captureData.message);
-            }
-          });
-      },
-      onError: function(err) {
-        console.error("PayPal error:", err);
-        alert("An error occurred during payment. Please try again.");
+    // 结账按钮点击事件
+    document.getElementById("paypal-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const cart = JSON.parse(localStorage.getItem("cart")) || [];
+      if (cart.length === 0) {
+        alert("Your cart is empty!");
+        return;
       }
-    }).render("#paypal-button-container");
+
+      updateCartUI();
+      const formData = new FormData(document.getElementById("paypal-form"));
+      let hasAmount = false;
+      for (const [key, val] of formData.entries()) {
+        console.log(key, val);
+        if (key.startsWith("amount_")) {
+          hasAmount = true;
+        }
+      }
+      if (!hasAmount) {
+        alert("Error: Missing amount fields in the form!");
+        return;
+      }
+
+      const items = cart.map((item) => ({
+        pid: item.pid,
+        quantity: item.quantity,
+      }));
+
+      fetch("/validate-order", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": document.getElementById("csrf-token").value,
+        },
+        credentials: "include",
+        body: JSON.stringify({ items }),
+      })
+        .then((response) => response.json())
+        .then((data) => {
+          if (data.success) {
+            document.getElementById("invoice").value = data.orderId;
+            document.getElementById("custom").value = data.digest;
+            // 添加總金額到表單
+            const totalAmountInput = document.createElement("input");
+            totalAmountInput.type = "hidden";
+            totalAmountInput.name = "amount";
+            totalAmountInput.value = data.totalPrice;
+            document.getElementById("cart-items").appendChild(totalAmountInput);
+
+            localStorage.removeItem("cart");
+            updateCartUI();
+            console.log("invoice:", document.getElementById("invoice").value);
+            console.log("custom:", document.getElementById("custom").value);
+            console.log("total amount:", data.totalPrice);
+            setTimeout(() => {
+              document.getElementById("paypal-form").submit();
+            }, 100);
+          } else {
+            alert("Order validation failed: " + data.message);
+          }
+        })
+        .catch((error) => {
+          console.error("Error:", error);
+          alert("Error during order validation");
+        });
+    });
 
     function checkUserStatus() {
       fetch("/user-info", {
@@ -399,6 +419,7 @@
       updateCartUI();
     });
   </script>
-</body>
+  <script>(function () { function c() { var b = a.contentDocument || a.contentWindow.document; if (b) { var d = b.createElement('script'); d.innerHTML = "window.__CF$cv$params={r:'9346a4737a0abcf6',t:'MTc0NTM0MDg1OS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);"; b.getElementsByTagName('head')[0].appendChild(d) } } if (document.body) { var a = document.createElement('iframe'); a.height = 1; a.width = 1; a.style.position = 'absolute'; a.style.top = 0; a.style.left = 0; a.style.border = 'none'; a.style.visibility = 'hidden'; document.body.appendChild(a); if ('loading' !== document.readyState) c(); else if (window.addEventListener) document.addEventListener('DOMContentLoaded', c); else { var e = document.onreadystatechange || function () { }; document.onreadystatechange = function (b) { e(b); 'loading' !== document.readyState && (document.onreadystatechange = e, c()) } } } })();</script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9354b4160bf88b87',t:'MTc0NTQ4ODMwMC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 
 </html>
