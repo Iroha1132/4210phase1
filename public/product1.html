@@ -154,20 +154,22 @@
 
     // 更新购物车 UI
     function updateCartUI() {
-      const cart = JSON.parse(localStorage.getItem("cart")) || [];
-      const cartItems = document.getElementById("cart-items");
-      cartItems.innerHTML = "";
-      let totalAmount = 0;
-      cart.forEach((item, index) => {
-        if (!item.price || isNaN(parseFloat(item.price))) {
-          console.error(`Invalid price for item ${item.name}: ${item.price}`);
-          return;
-        }
-        const price = parseFloat(item.price).toFixed(2);
-        totalAmount += price * item.quantity;
-        const cartItem = document.createElement("div");
-        cartItem.className = "cart-item";
-        cartItem.innerHTML = `
+  const cart = JSON.parse(localStorage.getItem("cart")) || [];
+  const cartItems = document.getElementById("cart-items");
+  cartItems.innerHTML = "";
+  let totalAmount = 0;
+
+  cart.forEach((item, index) => {
+    if (!item.price || isNaN(parseFloat(item.price))) {
+      console.error(`Invalid price for item ${item.name}: ${item.price}`);
+      return;
+    }
+    const price = parseFloat(item.price).toFixed(2);
+    totalAmount += parseFloat(price) * item.quantity;
+
+    const cartItem = document.createElement("div");
+    cartItem.className = "cart-item";
+    cartItem.innerHTML = `
       <input type="hidden" name="item_name_${index + 1}" value="${item.name}">
       <input type="hidden" name="item_number_${index + 1}" value="${item.pid}">
       <input type="hidden" name="quantity_${index + 1}" value="${item.quantity}">
@@ -176,13 +178,21 @@
       <span>${item.name} - ${price} HKD</span>
       <button class="remove-item" data-pid="${item.pid}">Remove</button>
     `;
-        cartItems.appendChild(cartItem);
-      });
-      const totalElement = document.createElement("div");
-      totalElement.className = "total";
-      totalElement.innerHTML = `Total: ${totalAmount.toFixed(2)} HKD`;
-      cartItems.appendChild(totalElement);
-    }
+    cartItems.appendChild(cartItem);
+  });
+
+  const totalElement = document.createElement("div");
+  totalElement.className = "total";
+  totalElement.innerHTML = `Total: ${totalAmount.toFixed(2)} HKD`;
+  cartItems.appendChild(totalElement);
+
+  // 添加总金额字段
+  const totalAmountInput = document.createElement("input");
+  totalAmountInput.type = "hidden";
+  totalAmountInput.name = "amount";
+  totalAmountInput.value = totalAmount.toFixed(2);
+  document.getElementById("paypal-form").appendChild(totalAmountInput);
+}
 
     // 删除购物车中的商品
     document.addEventListener("click", (event) => {
@@ -212,70 +222,77 @@
 
     // 结账按钮点击事件
     document.getElementById("paypal-form").addEventListener("submit", (e) => {
-      e.preventDefault();
-      const cart = JSON.parse(localStorage.getItem("cart")) || [];
-      if (cart.length === 0) {
-        alert("Your cart is empty!");
-        return;
-      }
+  e.preventDefault();
+  const cart = JSON.parse(localStorage.getItem("cart")) || [];
+  if (cart.length === 0) {
+    alert("Your cart is empty!");
+    return;
+  }
 
-      updateCartUI();
-      const formData = new FormData(document.getElementById("paypal-form"));
-      let hasAmount = false;
-      for (const [key, val] of formData.entries()) {
-        console.log(key, val);
-        if (key.startsWith("amount_")) {
-          hasAmount = true;
+  updateCartUI();
+
+  // 验证 amount_X 字段是否存在
+  const formData = new FormData(document.getElementById("paypal-form"));
+  let hasAmount = false;
+  for (const [key, val] of formData.entries()) {
+    if (key.startsWith("amount_")) {
+      hasAmount = true;
+    }
+  }
+  if (!hasAmount) {
+    alert("Error: Missing amount fields in the form!");
+    return;
+  }
+
+  const items = cart.map((item) => ({
+    pid: item.pid,
+    quantity: item.quantity,
+  }));
+
+  fetch("/validate-order", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRF-Token": document.getElementById("csrf-token").value,
+    },
+    credentials: "include",
+    body: JSON.stringify({ items }),
+  })
+    .then((response) => response.json())
+    .then((data) => {
+      if (data.success) {
+        // 更新 invoice 和 custom 字段
+        document.getElementById("invoice").value = data.orderId;
+        document.getElementById("custom").value = data.digest;
+
+        // 添加总金额字段到 paypal-form
+        const totalAmountInput = document.createElement("input");
+        totalAmountInput.type = "hidden";
+        totalAmountInput.name = "amount";
+        totalAmountInput.value = data.totalPrice;
+        document.getElementById("paypal-form").appendChild(totalAmountInput); // 直接添加到表单
+
+        // 验证表单数据
+        const updatedFormData = new FormData(document.getElementById("paypal-form"));
+        console.log("Final form data:");
+        for (const [key, val] of updatedFormData.entries()) {
+          console.log(`  ${key}: ${val}`);
         }
+
+        localStorage.removeItem("cart");
+        updateCartUI();
+
+        // 直接提交表单，移除 setTimeout
+        document.getElementById("paypal-form").submit();
+      } else {
+        alert("Order validation failed: " + data.message);
       }
-      if (!hasAmount) {
-        alert("Error: Missing amount fields in the form!");
-        return;
-      }
-
-      const items = cart.map((item) => ({
-        pid: item.pid,
-        quantity: item.quantity,
-      }));
-
-      fetch("/validate-order", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRF-Token": document.getElementById("csrf-token").value,
-        },
-        credentials: "include",
-        body: JSON.stringify({ items }),
-      })
-        .then((response) => response.json())
-        .then((data) => {
-          if (data.success) {
-            document.getElementById("invoice").value = data.orderId;
-            document.getElementById("custom").value = data.digest;
-            // 添加總金額到表單
-            const totalAmountInput = document.createElement("input");
-            totalAmountInput.type = "hidden";
-            totalAmountInput.name = "amount";
-            totalAmountInput.value = data.totalPrice;
-            document.getElementById("cart-items").appendChild(totalAmountInput);
-
-            localStorage.removeItem("cart");
-            updateCartUI();
-            console.log("invoice:", document.getElementById("invoice").value);
-            console.log("custom:", document.getElementById("custom").value);
-            console.log("total amount:", data.totalPrice);
-            setTimeout(() => {
-              document.getElementById("paypal-form").submit();
-            }, 100);
-          } else {
-            alert("Order validation failed: " + data.message);
-          }
-        })
-        .catch((error) => {
-          console.error("Error:", error);
-          alert("Error during order validation");
-        });
+    })
+    .catch((error) => {
+      console.error("Error:", error);
+      alert("Error during order validation");
     });
+});
 
     function checkUserStatus() {
       fetch("/user-info", {
