@@ -9,11 +9,12 @@ const cookieParser = require('cookie-parser');
 const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const sanitizeHtml = require('sanitize-html');
-const https = require('https');
-const fs = require('fs');
-const dotenv = require('dotenv');
 const http = require('http');
+const fetch = require('node-fetch');
+const dotenv = require('dotenv');
 dotenv.config();
+
+const fs = require('fs');
 
 const app = express();
 const upload = multer({ dest: 'uploads/', limits: { fileSize: 10 * 1024 * 1024 } });
@@ -21,16 +22,29 @@ const upload = multer({ dest: 'uploads/', limits: { fileSize: 10 * 1024 * 1024 }
 const db = mysql.createPool({
     host: process.env.DB_HOST || 'localhost',
     user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || 'ierg4210',
+    password: process.env.DB_PASSWORD || 'zhang1325020',
+    database: process.env.DB_NAME || 'dummy_shop',
     waitForConnections: true,
     connectionLimit: 10,
-    queueLimit: 0
+    queueLimit: 0,
+    ssl: {
+        rejectUnauthorized: true,
+        ca: fs.readFileSync("./DigiCertGlobalRootCA.crt.pem", "utf8"),
+    }
+});
+
+db.getConnection((err, connection) => {
+    if (err) {
+        console.error('Database connection failed:', err);
+        process.exit(1);
+    }
+    console.log('Database connected successfully');
+    connection.release();
 });
 
 // Middleware
 app.use(cors({
-    origin: 'https://localhost',
+    origin: 'https://ierg4210.eastasia.cloudapp.azure.com',
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token']
@@ -38,7 +52,8 @@ app.use(cors({
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 app.use(cookieParser());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use('/public', express.static(path.join(__dirname, 'public')));
+app.use(express.static(__dirname, { index: false }));
 
 // CSRF Protection
 const generateCsrfToken = () => crypto.randomBytes(16).toString('hex');
@@ -58,23 +73,6 @@ const validateCsrfToken = (req, res, next) => {
     }
     next();
 };
-
-// Input Validation
-const validateTextInput = (text, maxLength, fieldName) => {
-    if (!text || typeof text !== 'string') return `${fieldName} is required`;
-    if (text.length > maxLength) return `${fieldName} must be ${maxLength} characters or less`;
-    if (!/^[a-zA-Z0-9\s\-,.@]+$/.test(text)) return `${fieldName} contains invalid characters`;
-    return null;
-};
-
-const validatePrice = (price) => {
-    const num = parseFloat(price);
-    if (isNaN(num) || num < 0) return 'Price must be a non-negative number';
-    return null;
-};
-
-// Escape HTML
-const escapeHtml = (text) => sanitizeHtml(text, { allowedTags: [], allowedAttributes: {} });
 
 // Authentication Middleware
 const authenticate = async (req, res, next) => {
@@ -98,21 +96,34 @@ const isAdmin = (req, res, next) => {
     next();
 };
 
-// Routes
+// Input Validation
+const validateTextInput = (text, maxLength, fieldName) => {
+    if (!text || typeof text !== 'string') return `${fieldName} is required`;
+    if (text.length > maxLength) return `${fieldName} must be ${maxLength} characters or less`;
+    if (!/^[a-zA-Z0-9\s\-,.]+$/.test(text)) return `${fieldName} contains invalid characters`;
+    return null;
+};
+
+const validatePrice = (price) => {
+    const num = parseFloat(price);
+    if (isNaN(num) || num < 0) return 'Price must be a non-negative number';
+    return null;
+};
+
+// Escape HTML function
+const escapeHtml = (text) => sanitizeHtml(text, { allowedTags: [], allowedAttributes: {} });
+
+// Routes for HTML pages
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 app.get('/login', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'login.html'));
-});
-
-app.get('/register', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'register.html'));
+    res.sendFile(path.join(__dirname, 'login.html'));
 });
 
 app.get('/product', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'product.html'));
+    res.sendFile(path.join(__dirname, 'product.html'));
 });
 
 app.get('/admin', authenticate, isAdmin, (req, res) => {
@@ -121,14 +132,6 @@ app.get('/admin', authenticate, isAdmin, (req, res) => {
 
 app.get('/public/admin.html', (req, res) => {
     res.redirect('/login');
-});
-
-app.get('/user-dashboard', authenticate, (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'user-dashboard.html'));
-});
-
-app.get('/orders', authenticate, (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'orders.html'));
 });
 
 // API Routes
@@ -214,6 +217,13 @@ app.get('/product/:pid', async (req, res) => {
     }
 });
 
+app.get('/orders', authenticate, (req, res) => {
+    if (!req.user) {
+        return res.redirect('/login');
+    }
+    res.sendFile(path.join(__dirname, 'orders.html'));
+});
+
 app.get('/orders-data', authenticate, async (req, res) => {
     if (!req.user) {
         return res.status(401).json({ error: 'Not authenticated' });
@@ -237,81 +247,85 @@ app.get('/orders-data', authenticate, async (req, res) => {
     }
 });
 
-app.post('/register', validateCsrfToken, async (req, res) => {
+app.get('/admin-orders', authenticate, isAdmin, async (req, res) => {
     try {
-        const { email, password } = req.body;
-        const emailError = validateTextInput(email, 255, 'Email');
-        if (emailError) return res.status(400).json({ error: emailError });
-        if (!password || password.length < 8 || password.length > 50) {
-            return res.status(400).json({ error: 'Password must be between 8 and 50 characters' });
-        }
-
-        const [existingUsers] = await db.query('SELECT email FROM users WHERE email = ?', [email]);
-        if (existingUsers.length > 0) {
-            return res.status(400).json({ error: 'Email already exists' });
-        }
-
-        const hash = await bcrypt.hash(password, 10);
-        const authToken = crypto.randomBytes(32).toString('hex');
-        await db.query(
-            'INSERT INTO users (email, password, auth_token, is_admin) VALUES (?, ?, ?, ?)',
-            [email, hash, authToken, 0]
-        );
-
-        res.cookie('authToken', authToken, {
-            httpOnly: true,
-            secure: true,
-            sameSite: 'strict',
-            maxAge: 2 * 24 * 60 * 60 * 1000,
-            path: '/'
-        });
-
-        res.json({ success: true, redirect: '/login' });
+        const [orders] = await db.query('SELECT * FROM orders ORDER BY created_at DESC');
+        res.json(orders.map(order => ({
+            order_id: order.orderID,
+            email: order.user_email,
+            total_amount: order.total_price,
+            items: order.items,
+            status: order.status,
+            created_at: order.created_at
+        })));
     } catch (err) {
-        console.error('Registration error:', err);
-        res.status(500).json({ error: 'Internal Server Error' });
+        console.error('Error fetching admin orders:', err);
+        res.status(500).json({ error: 'Error fetching orders' });
     }
 });
 
 app.post('/login', validateCsrfToken, async (req, res) => {
     try {
         const { email, password } = req.body;
-        const emailError = validateTextInput(email, 255, 'Email');
-        if (emailError) return res.status(400).json({ error: emailError });
-        if (!password || password.length < 8) {
-            return res.status(400).json({ error: 'Password must be at least 8 characters' });
+        
+        const connection = await db.getConnection();
+        
+        try {
+            const [users] = await connection.query(
+                'SELECT userid, email, password, is_admin FROM users WHERE email = ?', 
+                [email]
+            );
+
+            if (users.length === 0) {
+                connection.release();
+                return res.status(401).json({ error: 'Invalid credentials' });
+            }
+
+            const user = users[0];
+            const match = await bcrypt.compare(password, user.password);
+            
+            if (!match) {
+                connection.release();
+                return res.status(401).json({ error: 'Invalid credentials' });
+            }
+
+            const authToken = crypto.randomBytes(32).toString('hex');
+            
+            await connection.query(
+                'UPDATE users SET auth_token = ? WHERE userid = ?',
+                [authToken, user.userid]
+            );
+
+            connection.release();
+
+            res.cookie('authToken', authToken, {
+                httpOnly: true,
+                secure: true,
+                sameSite: 'strict',
+                maxAge: 2 * 24 * 60 * 60 * 1000,
+                path: '/'
+            });
+
+            res.json({ 
+                role: user.is_admin ? 'admin' : 'user',
+                redirect: user.is_admin ? '/admin' : '/',
+                email: user.email
+            });
+
+        } catch (err) {
+            connection.release();
+            console.error('Login error:', err.stack);
+            res.status(500).json({ 
+                error: 'Internal server error',
+                details: process.env.NODE_ENV === 'development' ? err.message : null
+            });
         }
-
-        const [users] = await db.query('SELECT * FROM users WHERE email = ?', [email]);
-        if (users.length === 0) {
-            return res.status(401).json({ error: 'Invalid credentials' });
-        }
-
-        const user = users[0];
-        const match = await bcrypt.compare(password, user.password);
-        if (!match) {
-            return res.status(401).json({ error: 'Invalid credentials' });
-        }
-
-        const authToken = crypto.randomBytes(32).toString('hex');
-        await db.query('UPDATE users SET auth_token = ? WHERE userid = ?', [authToken, user.userid]);
-
-        res.cookie('authToken', authToken, {
-            httpOnly: true,
-            secure: true,
-            sameSite: 'strict',
-            maxAge: 2 * 24 * 60 * 60 * 1000,
-            path: '/'
-        });
-
-        res.json({ 
-            role: user.is_admin ? 'admin' : 'user',
-            redirect: user.is_admin ? '/admin' : '/',
-            email: user.email
-        });
     } catch (err) {
-        console.error('Login error:', err);
-        res.status(500).json({ error: 'Internal Server Error' });
+        console.error('Connection error:', err.stack);
+        res.status(500).json({ 
+            error: 'Internal server error',
+            details: process.env.NODE_ENV === 'development' ? err.message : null
+        });
     }
 });
 
@@ -319,10 +333,19 @@ app.post('/logout', validateCsrfToken, authenticate, async (req, res) => {
     try {
         await db.query('UPDATE users SET auth_token = NULL WHERE userid = ?', [req.user.userid]);
         res.clearCookie('authToken');
-        res.clearCookie('csrfToken');
+        
         const newCsrfToken = generateCsrfToken();
-        res.cookie('csrfToken', newCsrfToken, { httpOnly: true, secure: true, sameSite: 'strict' });
-        res.json({ success: true, redirect: '/login', csrfToken: newCsrfToken });
+        res.cookie('csrfToken', newCsrfToken, { 
+            httpOnly: true, 
+            secure: true, 
+            sameSite: 'strict' 
+        });
+        
+        res.json({ 
+            success: true, 
+            redirect: '/login',
+            csrfToken: newCsrfToken
+        });
     } catch (err) {
         console.error('Logout error:', err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -353,8 +376,10 @@ app.post('/change-password', validateCsrfToken, authenticate, async (req, res) =
 
 app.post('/validate-order', validateCsrfToken, authenticate, async (req, res) => {
     try {
+        console.log('Validate-order request body:', req.body);
         const { items } = req.body;
         if (!items || !Array.isArray(items)) {
+            console.log('Invalid items detected');
             return res.status(400).json({ error: 'Invalid items' });
         }
 
@@ -363,16 +388,20 @@ app.post('/validate-order', validateCsrfToken, authenticate, async (req, res) =>
             let totalPrice = 0;
             const orderItems = [];
             const currency = 'USD';
-            const merchantEmail = 'testing6070@example.com';
+            const merchantEmail = 'sb-7vfg240731629@business.example.com';
             const salt = crypto.randomBytes(16).toString('hex');
 
             for (const item of items) {
+                console.log('Processing item:', item);
                 if (!item.pid || !Number.isInteger(item.quantity) || item.quantity <= 0) {
+                    console.log('Invalid item data:', item);
                     throw new Error('Invalid item data');
                 }
 
                 const [products] = await connection.query('SELECT pid, price FROM products WHERE pid = ?', [item.pid]);
+                console.log('Database query result for pid', item.pid, ':', products);
                 if (products.length === 0) {
+                    console.log('Product not found:', item.pid);
                     throw new Error(`Product ${item.pid} not found`);
                 }
 
@@ -392,26 +421,35 @@ app.post('/validate-order', validateCsrfToken, authenticate, async (req, res) =>
                 ...orderItems.map(item => `${item.pid}:${item.quantity}:${item.price}`)
             ].join('|');
             const digest = crypto.createHash('sha256').update(dataToHash).digest('hex');
+            console.log('Digest data:', dataToHash);
+            console.log('Generated digest:', digest);
 
             const userEmail = req.user ? req.user.email : null;
+            console.log('User email:', userEmail);
             const [result] = await connection.query(
                 'INSERT INTO orders (user_email, items, total_price, digest, salt, status) VALUES (?, ?, ?, ?, ?, ?)',
                 [userEmail, JSON.stringify(orderItems), totalPrice, digest, salt, 'pending']
             );
+            console.log('Order inserted, ID:', result.insertId);
 
             connection.release();
             res.json({ orderID: result.insertId, digest });
         } catch (err) {
             connection.release();
+            console.error('Order validation error:', err);
             res.status(400).json({ error: err.message });
         }
     } catch (err) {
+        console.error('Connection error:', err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 });
 
 app.post('/paypal-webhook', async (req, res) => {
     try {
+        console.log('PayPal webhook received:', req.body);
+
+        // Verify PayPal IPN
         const verificationUrl = 'https://www.sandbox.paypal.com/cgi-bin/webscr?cmd=_notify-validate';
         const verificationBody = `cmd=_notify-validate&${new URLSearchParams(req.body).toString()}`;
         const verificationResponse = await fetch(verificationUrl, {
@@ -422,26 +460,33 @@ app.post('/paypal-webhook', async (req, res) => {
         const verificationResult = await verificationResponse.text();
 
         if (verificationResult !== 'VERIFIED') {
+            console.error('PayPal verification failed:', verificationResult);
             return res.status(400).send('Invalid PayPal notification');
         }
 
+        // Check if transaction already processed
         const paypalTxnId = req.body.txn_id;
         const [existing] = await db.query('SELECT transaction_id FROM transactions WHERE paypal_txn_id = ?', [paypalTxnId]);
         if (existing.length > 0) {
+            console.warn('Transaction already processed:', paypalTxnId);
             return res.status(200).send('OK');
         }
 
+        // Fetch order
         const orderID = parseInt(req.body.invoice);
         const [orders] = await db.query('SELECT * FROM orders WHERE orderID = ?', [orderID]);
         if (orders.length === 0) {
+            console.error('Order not found:', orderID);
             return res.status(400).send('Order not found');
         }
 
         const order = orders[0];
+        // Check if order.items is already an object; if not, parse it
         const orderItems = typeof order.items === 'string' ? JSON.parse(order.items) : order.items;
 
+        // Regenerate digest
         const currency = 'USD';
-        const merchantEmail = 'testing6070@example.com';
+        const merchantEmail = 'sb-7vfg240731629@business.example.com';
         const salt = order.salt;
         const dataToHash = [
             currency,
@@ -452,9 +497,11 @@ app.post('/paypal-webhook', async (req, res) => {
         const regeneratedDigest = crypto.createHash('sha256').update(dataToHash).digest('hex');
 
         if (regeneratedDigest !== order.digest) {
+            console.error('Digest mismatch:', regeneratedDigest, order.digest);
             return res.status(400).send('Digest validation failed');
         }
 
+        // Save transaction with product list
         await db.query(
             'INSERT INTO transactions (orderID, paypal_txn_id, payment_status, payment_amount, currency_code, payer_email, created_at, items) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
             [
@@ -469,6 +516,7 @@ app.post('/paypal-webhook', async (req, res) => {
             ]
         );
 
+        // Update order status
         const status = req.body.payment_status === 'Completed' ? 'completed' : 'failed';
         await db.query('UPDATE orders SET status = ? WHERE orderID = ?', [status, orderID]);
 
@@ -633,12 +681,6 @@ app.use((err, req, res, next) => {
     res.status(500).send('Internal Server Error');
 });
 
-// HTTPS Server
-const options = {
-    key: fs.readFileSync('/etc/letsencrypt/live/ierg4210.eastasia.cloudapp.azure.com/privkey.pem'),
-    cert: fs.readFileSync('/etc/letsencrypt/live/ierg4210.eastasia.cloudapp.azure.com/fullchain.pem')
-};
-
-http.createServer(app).listen(3000, () => {
-    console.log('Server running on port 3000');
+http.createServer(app).listen(3443, '0.0.0.0', () => {
+    console.log('HTTP Server running on port 3443');
 });
