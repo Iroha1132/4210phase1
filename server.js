@@ -504,6 +504,7 @@ app.post("/validate-order", csrfProtection, (req, res) => {
   const sql = "SELECT pid, price FROM products WHERE pid IN (?)";
   db.query(sql, [pids], (err, results) => {
     if (err || results.length !== pids.length) {
+      console.error("Product query error:", err);
       return res.json({ success: false, message: "Invalid products" });
     }
 
@@ -516,6 +517,13 @@ app.post("/validate-order", csrfProtection, (req, res) => {
     items.forEach((item) => {
       totalPrice += prices[item.pid] * item.quantity;
     });
+
+    console.log("Calculated totalPrice:", totalPrice); // 调试日志
+
+    if (!totalPrice || totalPrice <= 0) {
+      console.error("Invalid totalPrice:", totalPrice);
+      return res.json({ success: false, message: "Invalid total price" });
+    }
 
     const salt = crypto.randomBytes(16).toString("hex");
     const dataToHash = [
@@ -530,6 +538,7 @@ app.post("/validate-order", csrfProtection, (req, res) => {
     const orderSql = "INSERT INTO orders (userId, username, totalPrice, digest, status) VALUES (?, ?, ?, ?, 'pending')";
     db.query(orderSql, [userId, username, totalPrice, digest], (err, result) => {
       if (err) {
+        console.error("Order creation error:", err);
         return res.json({ success: false, message: "Order creation failed" });
       }
 
@@ -544,6 +553,7 @@ app.post("/validate-order", csrfProtection, (req, res) => {
 
       db.query(itemSql, [itemValues], (err) => {
         if (err) {
+          console.error("Order items creation error:", err);
           return res.json({ success: false, message: "Order items creation failed" });
         }
         res.json({ success: true, orderId, digest, totalPrice: totalPrice.toFixed(2) });
