@@ -518,7 +518,7 @@ app.post("/validate-order", csrfProtection, (req, res) => {
     const salt = crypto.randomBytes(16).toString("hex");
     const dataToHash = [
       "USD",
-      "sb-zwa7g40564566@business.example.com",
+      "sb-7vfg240731629@business.example.com",
       salt,
       ...items.map((item) => `${item.pid}:${item.quantity}:${prices[item.pid]}`),
       totalPrice.toFixed(2),
@@ -608,7 +608,7 @@ app.post("/paypal-webhook", express.raw({ type: "application/json" }), async (re
 
             const dataToHash = [
               order.currency,
-              "sb-zwa7g40564566@business.example.com",
+              "sb-7vfg240731629@business.example.com",
               order.salt,
               ...itemResults.map((item) => `${item.pid}:${item.quantity}:${item.price}`),
               order.totalPrice.toFixed(2),
