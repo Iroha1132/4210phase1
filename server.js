@@ -1,4 +1,3 @@
-```javascript
 const express = require("express");
 const bodyParser = require("body-parser");
 const mysql = require("mysql");
@@ -827,4 +826,3 @@ const options = {
 app.listen(3000, "127.0.0.1", () => {
   console.log("Node.js running on http://localhost:3000");
 });
-```
