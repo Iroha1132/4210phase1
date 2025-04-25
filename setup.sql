@@ -38,7 +38,7 @@ CREATE TABLE orders (
     digest VARCHAR(255) NOT NULL,
     salt VARCHAR(32) NOT NULL,
     status ENUM('pending', 'completed', 'failed') NOT NULL DEFAULT 'pending',
-    created at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_email) REFERENCES users(email) ON DELETE SET NULL
 );
 
