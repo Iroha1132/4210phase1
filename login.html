@@ -27,7 +27,7 @@
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             // Handle CSRF token
-            fetch('https://ierg4210.koreacentral.cloudapp.azure.com/csrf-token', { credentials: 'include' })
+            fetch('https://ierg4210.eastasia.cloudapp.azure.com/csrf-token', { credentials: 'include' })
                 .then(res => res.json())
                 .then(data => {
                     document.getElementById('csrfToken').value = data.csrfToken;
@@ -51,11 +51,11 @@
                 }
 
                 try {
-                    const csrfResponse = await fetch('https://ierg4210.koreacentral.cloudapp.azure.com/csrf-token', { credentials: 'include' });
+                    const csrfResponse = await fetch('https://ierg4210.eastasia.cloudapp.azure.com/csrf-token', { credentials: 'include' });
                     const csrfData = await csrfResponse.json();
                     document.getElementById('csrfToken').value = csrfData.csrfToken;
 
-                    const loginResponse = await fetch('https://ierg4210.koreacentral.cloudapp.azure.com/login', {
+                    const loginResponse = await fetch('https://ierg4210.eastasia.cloudapp.azure.com/login', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ email, password, csrfToken: csrfData.csrfToken }),
@@ -65,7 +65,7 @@
                     const data = await loginResponse.json();
                     if (!loginResponse.ok) {
                         alert(data.error || 'Invalid email or password. Please try again.');
-                        fetch('https://ierg4210.koreacentral.cloudapp.azure.com/csrf-token', { credentials: 'include' })
+                        fetch('https://ierg4210.eastasia.cloudapp.azure.com/csrf-token', { credentials: 'include' })
                             .then(res => res.json())
                             .then(data => document.getElementById('csrfToken').value = data.csrfToken);
                         return;
@@ -75,7 +75,7 @@
                 } catch (err) {
                     console.error('Login error:', err);
                     alert('An error occurred during login. Please try again later.');
-                    fetch('https://ierg4210.koreacentral.cloudapp.azure.com/csrf-token', { credentials: 'include' })
+                    fetch('https://ierg4210.eastasia.cloudapp.azure.com/csrf-token', { credentials: 'include' })
                         .then(res => res.json())
                         .then(data => document.getElementById('csrfToken').value = data.csrfToken);
                 }
