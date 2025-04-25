@@ -59,7 +59,7 @@ CREATE TABLE transactions (
 -- Insert initial categories
 INSERT INTO categories (name) VALUES
 ('Category1'),
-('Category2')；
+('Category2');
 
 -- Insert initial products
 INSERT INTO products (catid, name, price, description, image, thumbnail) VALUES
