@@ -697,7 +697,10 @@ app.get('/messages', authenticate, async (req, res) => {
     if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
     
     try {
-        const [messages] = await db.query('SELECT * FROM messages WHERE user_email = ? ORDER BY created_at ASC', [req.user.email]);
+        const [messages] = await db.query(
+            'SELECT message_id, user_email, content, created_at, admin_reply, replied_at FROM messages WHERE user_email = ? ORDER BY created_at ASC',
+            [req.user.email]
+        );
         res.json(messages.map(msg => ({
             message_id: msg.message_id,
             user_email: msg.user_email,
@@ -732,11 +735,22 @@ app.get('/admin-messages', authenticate, isAdmin, async (req, res) => {
 app.post('/reply-message', validateCsrfToken, authenticate, isAdmin, async (req, res) => {
     const { message_id, reply } = req.body;
     const replyError = validateTextInput(reply, 1000, 'Reply content');
-    if (replyError || !message_id) return res.status(400).json({ error: replyError || 'Message ID is required' });
+    if (replyError || !message_id) {
+        console.error('Reply validation error:', { message_id, replyError });
+        return res.status(400).json({ error: replyError || 'Message ID is required' });
+    }
 
     const sanitizedReply = sanitizeHtml(reply);
     try {
-        await db.query('UPDATE messages SET admin_reply = ?, replied_at = NOW() WHERE message_id = ?', [sanitizedReply, message_id]);
+        const [result] = await db.query(
+            'UPDATE messages SET admin_reply = ?, replied_at = NOW() WHERE message_id = ?',
+            [sanitizedReply, message_id]
+        );
+        if (result.affectedRows === 0) {
+            console.error('Message not found:', message_id);
+            return res.status(404).json({ error: 'Message not found' });
+        }
+        console.log('Reply sent:', { message_id, reply: sanitizedReply });
         res.json({ success: true });
     } catch (err) {
         console.error('Reply message error:', err);
