@@ -44,7 +44,7 @@ db.getConnection((err, connection) => {
 
 // Middleware
 app.use(cors({
-    origin: ['https://ierg4210.eastasia.cloudapp.azure.com', 'https://s37.ierg4210.ie.cuhk.edu.hk'],
+    origin: 'https://ierg4210.eastasia.cloudapp.azure.com',
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token']
@@ -53,14 +53,7 @@ app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 app.use(cookieParser());
 app.use('/public', express.static(path.join(__dirname, 'public')));
-app.use(express.static(__dirname, {
-    index: false,
-    setHeaders: (res, path) => {
-        if (path.endsWith('.js')) {
-            res.setHeader('Content-Type', 'text/javascript');
-        }
-    }
-}));
+app.use(express.static(__dirname, { index: false }));
 
 // CSRF Protection
 const generateCsrfToken = () => crypto.randomBytes(16).toString('hex');
@@ -107,7 +100,7 @@ const isAdmin = (req, res, next) => {
 const validateTextInput = (text, maxLength, fieldName) => {
     if (!text || typeof text !== 'string') return `${fieldName} is required`;
     if (text.length > maxLength) return `${fieldName} must be ${maxLength} characters or less`;
-    if (!/^[a-zA-Z0-9\s\-,.!?]+$/.test(text)) return `${fieldName} contains invalid characters`;
+    if (!/^[a-zA-Z0-9\s\-,.]+$/.test(text)) return `${fieldName} contains invalid characters`;
     return null;
 };
 
@@ -122,13 +115,7 @@ const escapeHtml = (text) => sanitizeHtml(text, { allowedTags: [], allowedAttrib
 
 // Routes for HTML pages
 app.get('/', (req, res) => {
-    res.setHeader('Content-Type', 'text/html');
     res.sendFile(path.join(__dirname, 'index.html'));
-});
-
-app.get('/product', (req, res) => {
-    res.setHeader('Content-Type', 'text/html');
-    res.sendFile(path.join(__dirname, 'product.html'));
 });
 
 app.get('/login', (req, res) => {
@@ -136,7 +123,6 @@ app.get('/login', (req, res) => {
 });
 
 app.get('/product', (req, res) => {
-    res.setHeader('Content-Type', 'text/html');
     res.sendFile(path.join(__dirname, 'product.html'));
 });
 
@@ -687,89 +673,6 @@ app.delete('/delete-category/:catid', validateCsrfToken, authenticate, isAdmin, 
         }
         res.send('Category deleted');
     });
-});
-
-// Chatbox Routes
-app.post('/send-message', validateCsrfToken, authenticate, async (req, res) => {
-    if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
-    
-    const { content } = req.body;
-    const contentError = validateTextInput(content, 1000, 'Message content');
-    if (contentError) return res.status(400).json({ error: contentError });
-
-    const sanitizedContent = sanitizeHtml(content);
-    try {
-        await db.query('INSERT INTO messages (user_email, content) VALUES (?, ?)', [req.user.email, sanitizedContent]);
-        res.json({ success: true });
-    } catch (err) {
-        console.error('Send message error:', err);
-        res.status(500).json({ error: 'Internal Server Error' });
-    }
-});
-
-app.get('/messages', authenticate, async (req, res) => {
-    if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
-    
-    try {
-        const [messages] = await db.query(
-            'SELECT message_id, user_email, content, created_at, admin_reply, replied_at FROM messages WHERE user_email = ? ORDER BY created_at ASC',
-            [req.user.email]
-        );
-        res.json(messages.map(msg => ({
-            message_id: msg.message_id,
-            user_email: msg.user_email,
-            content: escapeHtml(msg.content),
-            created_at: msg.created_at,
-            admin_reply: msg.admin_reply ? escapeHtml(msg.admin_reply) : null,
-            replied_at: msg.replied_at
-        })));
-    } catch (err) {
-        console.error('Fetch messages error:', err);
-        res.status(500).json({ error: 'Internal Server Error' });
-    }
-});
-
-app.get('/admin-messages', authenticate, isAdmin, async (req, res) => {
-    try {
-        const [messages] = await db.query('SELECT * FROM messages ORDER BY created_at DESC');
-        res.json(messages.map(msg => ({
-            message_id: msg.message_id,
-            user_email: msg.user_email,
-            content: escapeHtml(msg.content),
-            created_at: msg.created_at,
-            admin_reply: msg.admin_reply ? escapeHtml(msg.admin_reply) : null,
-            replied_at: msg.replied_at
-        })));
-    } catch (err) {
-        console.error('Fetch admin messages error:', err);
-        res.status(500).json({ error: 'Internal Server Error' });
-    }
-});
-
-app.post('/reply-message', validateCsrfToken, authenticate, isAdmin, async (req, res) => {
-    const { message_id, reply } = req.body;
-    const replyError = validateTextInput(reply, 1000, 'Reply content');
-    if (replyError || !message_id) {
-        console.error('Reply validation error:', { message_id, replyError });
-        return res.status(400).json({ error: replyError || 'Message ID is required' });
-    }
-
-    const sanitizedReply = sanitizeHtml(reply);
-    try {
-        const [result] = await db.query(
-            'UPDATE messages SET admin_reply = ?, replied_at = NOW() WHERE message_id = ?',
-            [sanitizedReply, message_id]
-        );
-        if (result.affectedRows === 0) {
-            console.error('Message not found:', message_id);
-            return res.status(404).json({ error: 'Message not found' });
-        }
-        console.log('Reply sent:', { message_id, reply: sanitizedReply });
-        res.json({ success: true });
-    } catch (err) {
-        console.error('Reply message error:', err);
-        res.status(500).json({ error: 'Internal Server Error' });
-    }
 });
 
 // Error handler
