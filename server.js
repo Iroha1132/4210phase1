@@ -53,7 +53,14 @@ app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 app.use(cookieParser());
 app.use('/public', express.static(path.join(__dirname, 'public')));
-app.use(express.static(__dirname, { index: false }));
+app.use(express.static(__dirname, {
+    index: false,
+    setHeaders: (res, path) => {
+        if (path.endsWith('.js')) {
+            res.setHeader('Content-Type', 'text/javascript');
+        }
+    }
+}));
 
 // CSRF Protection
 const generateCsrfToken = () => crypto.randomBytes(16).toString('hex');
