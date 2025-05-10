@@ -2,11 +2,6 @@
 CREATE DATABASE IF NOT EXISTS dummy_shop;
 USE dummy_shop;
 
--- Drop all existing tables
-SET FOREIGN_KEY_CHECKS = 0;
-DROP TABLE IF EXISTS categories, products, users, orders, transactions, messages;
-SET FOREIGN_KEY_CHECKS = 1;
-
 -- Create categories table
 CREATE TABLE categories (
     catid INT AUTO_INCREMENT PRIMARY KEY,
@@ -59,17 +54,6 @@ CREATE TABLE transactions (
     items JSON NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (orderID) REFERENCES orders(orderID)
-);
-
--- Create messages table
-CREATE TABLE messages (
-    message_id INT AUTO_INCREMENT PRIMARY KEY,
-    user_email VARCHAR(255) NOT NULL,
-    content TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    admin_reply TEXT,
-    replied_at TIMESTAMP NULL,
-    FOREIGN KEY (user_email) REFERENCES users(email) ON DELETE CASCADE
 );
 
 -- Insert initial categories
