@@ -1,11 +1,11 @@
 <script type="text/javascript">
-    var gk_isXlsx = false;
-    var gk_xlsxFileLookup = {};
-    var gk_fileData = {};
-    function filledCell(cell) {
-        return cell !== '' && cell != null;
-    }
-    function loadFileData(filename) {
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
         if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
             try {
                 var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
@@ -19,11 +19,11 @@
 
                 // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
                 var headerRowIndex = filteredData.findIndex((row, index) =>
-                    row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
                 );
                 // Fallback
                 if (headerRowIndex === -1 || headerRowIndex > 25) {
-                    headerRowIndex = 0;
+                  headerRowIndex = 0;
                 }
 
                 // Convert filtered JSON back to CSV
@@ -36,41 +36,8 @@
             }
         }
         return gk_fileData[filename] || "";
-    }
-</script>
-<script type="text/javascript">
-    var gk_isXlsx = false;
-    var gk_xlsxFileLookup = {};
-    var gk_fileData = {};
-    function filledCell(cell) {
-        return cell !== '' && cell != null;
-    }
-    function loadFileData(filename) {
-        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-            try {
-                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                var firstSheetName = workbook.SheetNames[0];
-                var worksheet = workbook.Sheets[firstSheetName];
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                var filteredData = jsonData.filter(row => row.some(filledCell));
-                var headerRowIndex = filteredData.findIndex((row, index) =>
-                    row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                );
-                if (headerRowIndex === -1 || headerRowIndex > 25) {
-                    headerRowIndex = 0;
-                }
-                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex));
-                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                return csv;
-            } catch (e) {
-                console.error(e);
-                return "";
-            }
         }
-        return gk_fileData[filename] || "";
-    }
-</script>
-<!DOCTYPE html>
+        </script><!DOCTYPE html>
 <html lang="en">
 
 <head>
@@ -129,6 +96,38 @@
         <h2>Customer Messages</h2>
         <ul id="messages-list"></ul>
     </div>
+    <script>
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+            return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+            if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+                try {
+                    var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                    var firstSheetName = workbook.SheetNames[0];
+                    var worksheet = workbook.Sheets[firstSheetName];
+                    var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                    var filteredData = jsonData.filter(row => row.some(filledCell));
+                    var headerRowIndex = filteredData.findIndex((row, index) =>
+                        row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                    );
+                    if (headerRowIndex === -1 || headerRowIndex > 25) {
+                        headerRowIndex = 0;
+                    }
+                    var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex));
+                    csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                    return csv;
+                } catch (e) {
+                    console.error(e);
+                    return "";
+                }
+            }
+            return gk_fileData[filename] || "";
+        }
+    </script>
     <script>
         let csrfToken;
 
@@ -189,17 +188,17 @@
                         const li = document.createElement('li');
                         li.className = 'message-item';
                         li.innerHTML = DOMPurify.sanitize(`
-                    <div>
-                        <p><strong>User:</strong> ${msg.user_email}</p>
-                        <p><strong>Message:</strong> ${msg.content}</p>
-                        <p><strong>Time:</strong> ${new Date(msg.created_at).toLocaleString()}</p>
-                        <p><strong>Reply:</strong> ${msg.admin_reply || 'No reply yet'}</p>
-                        ${msg.admin_reply ? `<p><strong>Replied At:</strong> ${new Date(msg.replied_at).toLocaleString()}</p>` : ''}
-                        <textarea id="reply-${msg.message_id}" placeholder="Type your reply..." rows="3"></textarea>
-                        <button class="reply-button" data-message-id="${msg.message_id}">Reply</button>
-                        <span class="error" id="error-${msg.message_id}"></span>
-                    </div>
-                `);
+                            <div>
+                                <p><strong>User:</strong> ${msg.user_email}</p>
+                                <p><strong>Message:</strong> ${msg.content}</p>
+                                <p><strong>Time:</strong> ${new Date(msg.created_at).toLocaleString()}</p>
+                                <p><strong>Reply:</strong> ${msg.admin_reply || 'No reply yet'}</p>
+                                ${msg.admin_reply ? `<p><strong>Replied At:</strong> ${new Date(msg.replied_at).toLocaleString()}</p>` : ''}
+                                <textarea id="reply-${msg.message_id}" placeholder="Type your reply..." rows="3"></textarea>
+                                <button class="reply-button" data-message-id="${msg.message_id}">Reply</button>
+                                <span class="error" id="error-${msg.message_id}"></span>
+                            </div>
+                        `);
                         messagesList.appendChild(li);
                     });
                     // 动态绑定事件
@@ -283,10 +282,27 @@
                         li.innerHTML = DOMPurify.sanitize(`
                             ${product.name} - $${product.price}
                             <a href="/product?pid=${product.pid}" target="_blank">View</a>
-                            <button onclick="deleteProduct(${product.pid})">Delete</button>
-                            <button onclick="editProduct(${product.pid}, '${product.name}', ${product.price}, '${product.description}', ${product.catid})">Edit</button>
+                            <button class="delete-product-button" data-pid="${product.pid}">Delete</button>
+                            <button class="edit-product-button" 
+                                    data-pid="${product.pid}" 
+                                    data-name="${product.name.replace(/"/g, '&quot;')}" 
+                                    data-price="${product.price}" 
+                                    data-description="${product.description.replace(/"/g, '&quot;')}" 
+                                    data-catid="${product.catid}">Edit</button>
                         `);
                         productList.appendChild(li);
+                    });
+                    // 绑定事件委托
+                    productList.addEventListener('click', (e) => {
+                        if (e.target.classList.contains('delete-product-button')) {
+                            const pid = e.target.dataset.pid;
+                            console.log('Delete product clicked for pid:', pid);
+                            deleteProduct(pid);
+                        } else if (e.target.classList.contains('edit-product-button')) {
+                            const { pid, name, price, description, catid } = e.target.dataset;
+                            console.log('Edit product clicked for pid:', pid, 'with data:', { name, price, description, catid });
+                            editProduct(pid, name, price, description, catid);
+                        }
                     });
                 })
                 .catch(err => console.error('Products error:', err));
@@ -305,10 +321,24 @@
                         const li = document.createElement('li');
                         li.innerHTML = DOMPurify.sanitize(`
                             ${category.name}
-                            <button onclick="deleteCategory(${category.catid})">Delete</button>
-                            <button onclick="editCategory(${category.catid}, '${category.name}')">Edit</button>
+                            <button class="delete-category-button" data-catid="${category.catid}">Delete</button>
+                            <button class="edit-category-button" 
+                                    data-catid="${category.catid}" 
+                                    data-name="${category.name.replace(/"/g, '&quot;')}">Edit</button>
                         `);
                         categoryList.appendChild(li);
+                    });
+                    // 绑定事件委托
+                    categoryList.addEventListener('click', (e) => {
+                        if (e.target.classList.contains('delete-category-button')) {
+                            const catid = e.target.dataset.catid;
+                            console.log('Delete category clicked for catid:', catid);
+                            deleteCategory(catid);
+                        } else if (e.target.classList.contains('edit-category-button')) {
+                            const { catid, name } = e.target.dataset;
+                            console.log('Edit category clicked for catid:', catid, 'with name:', name);
+                            editCategory(catid, name);
+                        }
                     });
                 })
                 .catch(err => console.error('Category list error:', err));
@@ -343,6 +373,7 @@
 
         function deleteProduct(pid) {
             if (confirm('Are you sure?')) {
+                console.log('Sending DELETE request for product:', pid);
                 fetch(`https://ierg4210.eastasia.cloudapp.azure.com/delete-product/${pid}`, {
                     method: 'DELETE',
                     headers: { 'X-CSRF-Token': csrfToken },
@@ -362,6 +393,7 @@
 
         function deleteCategory(catid) {
             if (confirm('Are you sure?')) {
+                console.log('Sending DELETE request for category:', catid);
                 fetch(`https://ierg4210.eastasia.cloudapp.azure.com/delete-category/${catid}`, {
                     method: 'DELETE',
                     headers: { 'X-CSRF-Token': csrfToken },
@@ -388,11 +420,11 @@
                 <label for="category">Category:</label>
                 <select id="category" name="catid" required></select><br>
                 <label for="name">Product Name:</label>
-                <input type="text" id="name" name="name" value="${name}" required><br>
+                <input type="text" id="name" name="name" value="${name.replace(/"/g, '&quot;')}" required><br>
                 <label for="price">Price:</label>
                 <input type="number" id="price" name="price" step="0.01" min="0" value="${price}" required><br>
                 <label for="description">Description:</label>
-                <textarea id="description" name="description" required>${description}</textarea><br>
+                <textarea id="description" name="description" required>${description.replace(/"/g, '&quot;')}</textarea><br>
                 <label for="image">Product Image:</label>
                 <input type="file" id="image" name="image" accept="image/jpeg,image/png,image/gif"><br>
                 <div id="image-error" class="error"></div>
@@ -411,7 +443,7 @@
                 <h2>Edit Category</h2>
                 <input type="hidden" name="csrfToken" id="csrfTokenCat" value="${csrfToken}">
                 <label for="category-name">Category Name:</label>
-                <input type="text" id="category-name" name="name" value="${name}" required><br>
+                <input type="text" id="category-name" name="name" value="${name.replace(/"/g, '&quot;')}" required><br>
                 <div id="category-form-error" class="error"></div>
                 <button type="submit">Update Category</button>
             `);
@@ -562,6 +594,7 @@
     <script>(function () { function c() { var b = a.contentDocument || a.contentWindow.document; if (b) { var d = b.createElement('script'); d.innerHTML = "window.__CF$cv$params={r:'9355c62f98f253e5',t:'MTc0NTQ5OTUyNy4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);"; b.getElementsByTagName('head')[0].appendChild(d) } } if (document.body) { var a = document.createElement('iframe'); a.height = 1; a.width = 1; a.style.position = 'absolute'; a.style.top = 0; a.style.left = 0; a.style.border = 'none'; a.style.visibility = 'hidden'; document.body.appendChild(a); if ('loading' !== document.readyState) c(); else if (window.addEventListener) document.addEventListener('DOMContentLoaded', c); else { var e = document.onreadystatechange || function () { }; document.onreadystatechange = function (b) { e(b); 'loading' !== document.readyState && (document.onreadystatechange = e, c()) } } } })();</script>
     <script>(function () { function c() { var b = a.contentDocument || a.contentWindow.document; if (b) { var d = b.createElement('script'); d.innerHTML = "window.__CF$cv$params={r:'93d857516ec7b058',t:'MTc0Njg2ODYyMS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);"; b.getElementsByTagName('head')[0].appendChild(d) } } if (document.body) { var a = document.createElement('iframe'); a.height = 1; a.width = 1; a.style.position = 'absolute'; a.style.top = 0; a.style.left = 0; a.style.border = 'none'; a.style.visibility = 'hidden'; document.body.appendChild(a); if ('loading' !== document.readyState) c(); else if (window.addEventListener) document.addEventListener('DOMContentLoaded', c); else { var e = document.onreadystatechange || function () { }; document.onreadystatechange = function (b) { e(b); 'loading' !== document.readyState && (document.onreadystatechange = e, c()) } } } })();</script>
     <script>(function () { function c() { var b = a.contentDocument || a.contentWindow.document; if (b) { var d = b.createElement('script'); d.innerHTML = "window.__CF$cv$params={r:'93d89866fa01dd20',t:'MTc0Njg3MTI4Ni4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);"; b.getElementsByTagName('head')[0].appendChild(d) } } if (document.body) { var a = document.createElement('iframe'); a.height = 1; a.width = 1; a.style.position = 'absolute'; a.style.top = 0; a.style.left = 0; a.style.border = 'none'; a.style.visibility = 'hidden'; document.body.appendChild(a); if ('loading' !== document.readyState) c(); else if (window.addEventListener) document.addEventListener('DOMContentLoaded', c); else { var e = document.onreadystatechange || function () { }; document.onreadystatechange = function (b) { e(b); 'loading' !== document.readyState && (document.onreadystatechange = e, c()) } } } })();</script>
+    <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'93daffd5591fe592',t:'MTc0Njg5NjQ5NS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script>
 </body>
 
 </html>
