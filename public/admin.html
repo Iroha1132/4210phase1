@@ -178,7 +178,7 @@
                         li.innerHTML = DOMPurify.sanitize(`
                     Order #${order.order_id} by ${order.email || 'Guest'}<br>
                     Items: ${itemDetails}<br>
-                    Total: $${order.total_amount.toFixed(2)}<br>
+                    Total: $${parseFloat(order.total_amount).toFixed(2)}<br>
                     Status: ${order.status}<br>
                     Created: ${new Date(order.created_at).toLocaleString()}
                 `);
