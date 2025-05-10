@@ -167,12 +167,12 @@
                     const orderList = document.getElementById('order-list');
                     orderList.innerHTML = '';
                     orders.forEach(order => {
-
+                        // 检查 order.items 是否为字符串，如果是则解析
                         const items = typeof order.items === 'string'
                             ? JSON.parse(order.items)
                             : order.items;
                         const itemDetails = items.map(item =>
-                            `Product #${item.pid}: ${item.quantity} x $${item.price.toFixed(2)}`
+                            `Product #${item.pid}: ${item.quantity} x $${parseFloat(item.price).toFixed(2)}`
                         ).join(', ');
                         const li = document.createElement('li');
                         li.innerHTML = DOMPurify.sanitize(`
