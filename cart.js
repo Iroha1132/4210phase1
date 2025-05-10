@@ -198,13 +198,13 @@ shoppingCart.addEventListener('mouseenter', () => {
 cartButton.addEventListener('mouseleave', () => {
     hideTimeout = setTimeout(() => {
         shoppingCart.classList.remove('visible');
-    }, 1000); // 1000ms delay
+    }, 300); // 300ms delay
 });
 
 shoppingCart.addEventListener('mouseleave', () => {
     hideTimeout = setTimeout(() => {
         shoppingCart.classList.remove('visible');
-    }, 1000); // 1000ms delay
+    }, 300); // 300ms delay
 });
 
 // Close cart immediately when clicking the close button
