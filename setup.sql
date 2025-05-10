@@ -2,14 +2,19 @@
 CREATE DATABASE IF NOT EXISTS dummy_shop;
 USE dummy_shop;
 
+-- Drop all existing tables
+SET FOREIGN_KEY_CHECKS = 0;
+DROP TABLE IF EXISTS categories, products, users, orders, transactions, messages;
+SET FOREIGN_KEY_CHECKS = 1;
+
 -- Create categories table
-CREATE TABLE IF NOT EXISTS categories (
+CREATE TABLE categories (
     catid INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(255) NOT NULL
 );
 
 -- Create products table
-CREATE TABLE IF NOT EXISTS products (
+CREATE TABLE products (
     pid INT AUTO_INCREMENT PRIMARY KEY,
     catid INT NOT NULL,
     name VARCHAR(255) NOT NULL,
@@ -21,7 +26,7 @@ CREATE TABLE IF NOT EXISTS products (
 );
 
 -- Create users table
-CREATE TABLE IF NOT EXISTS users (
+CREATE TABLE users (
     userid INT AUTO_INCREMENT PRIMARY KEY,
     email VARCHAR(255) NOT NULL UNIQUE,
     password VARCHAR(255) NOT NULL,
@@ -30,7 +35,7 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 -- Create orders table
-CREATE TABLE IF NOT EXISTS orders (
+CREATE TABLE orders (
     orderID INT AUTO_INCREMENT PRIMARY KEY,
     user_email VARCHAR(255),
     items JSON NOT NULL,
@@ -43,7 +48,7 @@ CREATE TABLE IF NOT EXISTS orders (
 );
 
 -- Create transactions table
-CREATE TABLE IF NOT EXISTS transactions (
+CREATE TABLE transactions (
     transaction_id INT AUTO_INCREMENT PRIMARY KEY,
     orderID INT NOT NULL,
     paypal_txn_id VARCHAR(255) NOT NULL,
@@ -57,7 +62,7 @@ CREATE TABLE IF NOT EXISTS transactions (
 );
 
 -- Create messages table
-CREATE TABLE IF NOT EXISTS messages (
+CREATE TABLE messages (
     message_id INT AUTO_INCREMENT PRIMARY KEY,
     user_email VARCHAR(255) NOT NULL,
     content TEXT NOT NULL,
@@ -67,57 +72,19 @@ CREATE TABLE IF NOT EXISTS messages (
     FOREIGN KEY (user_email) REFERENCES users(email) ON DELETE CASCADE
 );
 
--- Insert initial categories (only if not exists)
-INSERT INTO categories (name)
-SELECT * FROM (SELECT 'Category1') AS tmp
-WHERE NOT EXISTS (SELECT name FROM categories WHERE name = 'Category1')
-LIMIT 1;
+-- Insert initial categories
+INSERT INTO categories (name) VALUES
+('Category1'),
+('Category2');
 
-INSERT INTO categories (name)
-SELECT * FROM (SELECT 'Category2') AS tmp
-WHERE NOT EXISTS (SELECT name FROM categories WHERE name = 'Category2')
-LIMIT 1;
+-- Insert initial products
+INSERT INTO products (catid, name, price, description, image, thumbnail) VALUES
+(1, 'Product 1', 19.99, 'Default product description', '/images/product1.jpg', '/images/product1.jpg'),
+(1, 'Product 2', 29.99, 'Default product description', '/images/product2.jpg', '/images/product2.jpg'),
+(2, 'Product 3', 39.99, 'Default product description', '/images/product3.jpg', '/images/product3.jpg'),
+(2, 'Product 4', 49.99, 'Default product description', '/images/product4.jpg', '/images/product4.jpg');
 
--- Insert initial products (only if not exists)
-INSERT INTO products (catid, name, price, description, image, thumbnail)
-SELECT * FROM (
-    SELECT 1, 'Product 1', 19.99, 'Default product description', '/images/product1.jpg', '/images/product1.jpg'
-) AS tmp
-WHERE NOT EXISTS (SELECT name FROM products WHERE name = 'Product 1')
-LIMIT 1;
-
-INSERT INTO products (catid, name, price, description, image, thumbnail)
-SELECT * FROM (
-    SELECT 1, 'Product 2', 29.99, 'Default product description', '/images/product2.jpg', '/images/product2.jpg'
-) AS tmp
-WHERE NOT EXISTS (SELECT name FROM products WHERE name = 'Product 2')
-LIMIT 1;
-
-INSERT INTO products (catid, name, price, description, image, thumbnail)
-SELECT * FROM (
-    SELECT 2, 'Product 3', 39.99, 'Default product description', '/images/product3.jpg', '/images/product3.jpg'
-) AS tmp
-WHERE NOT EXISTS (SELECT name FROM products WHERE name = 'Product 3')
-LIMIT 1;
-
-INSERT INTO products (catid, name, price, description, image, thumbnail)
-SELECT * FROM (
-    SELECT 2, 'Product 4', 49.99, 'Default product description', '/images/product4.jpg', '/images/product4.jpg'
-) AS tmp
-WHERE NOT EXISTS (SELECT name FROM products WHERE name = 'Product 4')
-LIMIT 1;
-
--- Insert initial users (only if not exists)
-INSERT INTO users (email, password, is_admin)
-SELECT * FROM (
-    SELECT 'admin@example.com', '$2b$10$Ndwr9eo190tkFcXYHrFAaeipj76aGoYtp8gRu9vi1rd7Gd/W8Bhx.', TRUE
-) AS tmp
-WHERE NOT EXISTS (SELECT email FROM users WHERE email = 'admin@example.com')
-LIMIT 1;
-
-INSERT INTO users (email, password, is_admin)
-SELECT * FROM (
-    SELECT 'user@example.com', '$2b$10$7pG43mC8YO2Qe7s1fgxFSe3wM1HM16i3.T9HFWzdZk0cF9fg6wPjG', FALSE
-) AS tmp
-WHERE NOT EXISTS (SELECT email FROM users WHERE email = 'user@example.com')
-LIMIT 1;
+-- Insert initial users (passwords hashed with bcrypt)
+INSERT INTO users (email, password, is_admin) VALUES
+('admin@example.com', '$2b$10$Ndwr9eo190tkFcXYHrFAaeipj76aGoYtp8gRu9vi1rd7Gd/W8Bhx.', TRUE),
+('user@example.com', '$2b$10$7pG43mC8YO2Qe7s1fgxFSe3wM1HM16i3.T9HFWzdZk0cF9fg6wPjG', FALSE);
