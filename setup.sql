@@ -56,6 +56,17 @@ CREATE TABLE transactions (
     FOREIGN KEY (orderID) REFERENCES orders(orderID)
 );
 
+-- Create messages table
+CREATE TABLE messages (
+    message_id INT AUTO_INCREMENT PRIMARY KEY,
+    user_email VARCHAR(255) NOT NULL,
+    content TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    admin_reply TEXT,
+    replied_at TIMESTAMP NULL,
+    FOREIGN KEY (user_email) REFERENCES users(email) ON DELETE CASCADE
+);
+
 -- Insert initial categories
 INSERT INTO categories (name) VALUES
 ('Category1'),
