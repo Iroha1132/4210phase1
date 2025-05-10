@@ -115,7 +115,13 @@ const escapeHtml = (text) => sanitizeHtml(text, { allowedTags: [], allowedAttrib
 
 // Routes for HTML pages
 app.get('/', (req, res) => {
+    res.setHeader('Content-Type', 'text/html');
     res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+app.get('/product', (req, res) => {
+    res.setHeader('Content-Type', 'text/html');
+    res.sendFile(path.join(__dirname, 'product.html'));
 });
 
 app.get('/login', (req, res) => {
@@ -123,6 +129,7 @@ app.get('/login', (req, res) => {
 });
 
 app.get('/product', (req, res) => {
+    res.setHeader('Content-Type', 'text/html');
     res.sendFile(path.join(__dirname, 'product.html'));
 });
 
