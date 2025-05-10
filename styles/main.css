@@ -164,6 +164,7 @@ header nav ul li a:hover {
 }
 
 /* Product Details (for product.html) */
+/* Product Details Container */
 .product-details {
   display: flex;
   gap: 30px;
@@ -176,6 +177,7 @@ header nav ul li a:hover {
   align-items: center;
 }
 
+/* Product Image Container */
 .product-image-container {
   flex: 0 0 40%;
   max-width: 400px;
@@ -191,6 +193,7 @@ header nav ul li a:hover {
   object-fit: contain; /* Ensures image maintains aspect ratio */
 }
 
+/* Product Info Section */
 .product-info {
   flex: 1;
   padding: 20px;
@@ -220,6 +223,7 @@ header nav ul li a:hover {
   margin-top: 20px;
 }
 
+/* Updated Back to Home Button Styling */
 .back-link a {
   display: inline-block;
   padding: 10px 20px;
@@ -258,6 +262,7 @@ header nav ul li a:hover {
   }
 }
 
+/* Updated Logout Button Styling */
 #user-status, #logout-link {
   background-color: #e74c3c; /* Red background for logout */
   border: none;
@@ -277,6 +282,7 @@ header nav ul li a:hover {
   transform: translateY(-2px);
 }
 
+/* Remove list styling for the form */
 #logout-form {
   display: inline;
   list-style-type: none;
@@ -284,6 +290,7 @@ header nav ul li a:hover {
   margin: 0;
 }
 
+/* Buttons */
 .add-to-cart {
   background-color: #28a745;
   color: white;
@@ -299,6 +306,7 @@ header nav ul li a:hover {
   background-color: #218838;
 }
 
+/* Shopping Cart */
 #shopping-cart.shopping-cart {
   display: none;
   position: absolute;
@@ -384,6 +392,7 @@ header nav ul li a:hover {
   background-color: #0056b3;
 }
 
+/* Notification Styles */
 .notification {
   position: fixed;
   bottom: 20px;
@@ -404,6 +413,7 @@ header nav ul li a:hover {
   transform: translateY(0);
 }
 
+/* Animation for adding to cart */
 @keyframes addToCartAnimation {
   0% { transform: scale(1); }
   50% { transform: scale(1.2); }
@@ -414,6 +424,7 @@ header nav ul li a:hover {
   animation: addToCartAnimation 0.3s ease;
 }
 
+/* Close Button */
 .close-cart {
   position: absolute;
   top: 10px;
@@ -430,6 +441,7 @@ header nav ul li a:hover {
   color: #333;
 }
 
+/* Scrollbar Styling */
 .shopping-cart::-webkit-scrollbar {
   width: 8px;
 }
@@ -456,7 +468,6 @@ header nav ul li a:hover {
   padding: 0;
   font-size: inherit;
 }
-
 .user-status:hover {
   text-decoration: underline;
 }
@@ -473,7 +484,6 @@ label {
   color: #555;
   font-weight: bold;
 }
-
 input[type="email"],
 input[type="password"] {
   padding: 0.75rem;
@@ -484,7 +494,6 @@ input[type="password"] {
   width: 100%;
   box-sizing: border-box;
 }
-
 input[type="email"]:focus,
 input[type="password"]:focus {
   border-color: #007bff;
@@ -502,7 +511,6 @@ button {
   cursor: pointer;
   transition: background-color 0.3s;
 }
-
 button:hover {
   background-color: #0056b3;
 }
@@ -586,6 +594,7 @@ button:hover {
   margin-top: 1.5rem;
 }
 
+/* Updated Back to Home Button Styling */
 .back-link a {
   display: inline-block;
   padding: 10px 20px;
@@ -615,6 +624,7 @@ button:hover {
   }
 }
 
+/* Footer */
 footer {
   background-color: #333;
   color: white;
@@ -654,6 +664,9 @@ footer p {
   }
 }
 
+/* New Sections for Checkout and Orders */
+
+/* Checkout Button */
 .checkout {
   background-color: #28a745;
   color: white;
@@ -759,159 +772,4 @@ footer p {
   .orders li p {
     font-size: 0.9em;
   }
-}
-
-/* Chatbox Styles */
-.chatbox {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  z-index: 1000;
-}
-
-.chat-button {
-  background-color: #007bff;
-  color: white;
-  border: none;
-  border-radius: 50%;
-  width: 50px;
-  height: 50px;
-  font-size: 24px;
-  cursor: pointer;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-  transition: background-color 0.3s ease, transform 0.2s ease;
-}
-
-.chat-button:hover {
-  background-color: #0056b3;
-  transform: translateY(-2px);
-}
-
-.chat-window {
-  display: none;
-  position: absolute;
-  bottom: 60px;
-  right: 0;
-  background: white;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  width: 300px;
-  height: 400px;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-  opacity: 0;
-  transform: translateY(10px);
-  transition: opacity 0.3s ease, transform 0.3s ease;
-}
-
-.chat-window.visible {
-  display: flex;
-  opacity: 1;
-  transform: translateY(0);
-}
-
-.chat-header {
-  background: #007bff;
-  color: white;
-  padding: 10px;
-  border-radius: 8px 8px 0 0;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 1em;
-  font-weight: 600;
-}
-
-.close-chat {
-  background: none;
-  border: none;
-  color: white;
-  font-size: 1.2em;
-  cursor: pointer;
-  transition: color 0.3s ease;
-}
-
-.close-chat:hover {
-  color: #ddd;
-}
-
-.chat-messages {
-  flex: 1;
-  padding: 10px;
-  overflow-y: auto;
-  background: #fafafa;
-}
-
-.chat-messages::-webkit-scrollbar {
-  width: 6px;
-}
-
-.chat-messages::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 4px;
-}
-
-.chat-messages::-webkit-scrollbar-thumb {
-  background: #888;
-  border-radius: 4px;
-}
-
-.chat-messages::-webkit-scrollbar-thumb:hover {
-  background: #555;
-}
-
-.message {
-  margin: 8px 0;
-  padding: 8px 12px;
-  border-radius: 6px;
-  font-size: 0.9em;
-  max-width: 80%;
-}
-
-.user-message {
-  background: #e6f3ff;
-  margin-left: 10%;
-  text-align: right;
-}
-
-.admin-message {
-  background: #f0f0f0;
-  margin-right: 10%;
-  text-align: left;
-}
-
-.chat-input {
-  display: flex;
-  border-top: 1px solid #ddd;
-  background: white;
-  border-radius: 0 0 8px 8px;
-}
-
-.chat-input input {
-  flex: 1;
-  border: none;
-  padding: 10px;
-  font-size: 0.9em;
-  border-radius: 0 0 0 8px;
-  outline: none;
-}
-
-.chat-input input:focus {
-  border-color: #007bff;
-}
-
-.chat-input button {
-  background: #007bff;
-  color: white;
-  border: none;
-  padding: 10px 15px;
-  font-size: 0.9em;
-  cursor: pointer;
-  border-radius: 0 0 8px 0;
-  transition: background-color 0.3s ease;
-}
-
-.chat-input button:hover {
-  background: #0056b3;
 }
