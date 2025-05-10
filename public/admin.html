@@ -1,600 +1,402 @@
-<script type="text/javascript">
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function filledCell(cell) {
-          return cell !== '' && cell != null;
-        }
-        function loadFileData(filename) {
-        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-            try {
-                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                var firstSheetName = workbook.SheetNames[0];
-                var worksheet = workbook.Sheets[firstSheetName];
-
-                // Convert sheet to JSON to filter blank rows
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                // Filter out blank rows (rows where all cells are empty, null, or undefined)
-                var filteredData = jsonData.filter(row => row.some(filledCell));
-
-                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
-                var headerRowIndex = filteredData.findIndex((row, index) =>
-                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                );
-                // Fallback
-                if (headerRowIndex === -1 || headerRowIndex > 25) {
-                  headerRowIndex = 0;
-                }
-
-                // Convert filtered JSON back to CSV
-                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
-                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                return csv;
-            } catch (e) {
-                console.error(e);
-                return "";
-            }
-        }
-        return gk_fileData[filename] || "";
-        }
-        </script><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
-
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Panel</title>
-    <link rel="stylesheet" href="/styles/admin.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
-</head>
-
-<body>
-    <h1>Admin Panel</h1>
-    <p class="admin-back-link"><a href="/">← Back to Home</a></p>
-    <form id="product-form">
-        <h2>Manage Products</h2>
-        <input type="hidden" name="csrfToken" id="csrfToken">
-        <label for="category">Category:</label>
-        <select id="category" name="catid" required></select><br>
-        <label for="name">Product Name:</label>
-        <input type="text" id="name" name="name" required><br>
-        <label for="price">Price:</label>
-        <input type="number" id="price" name="price" step="0.01" min="0" required><br>
-        <label for="description">Description:</label>
-        <textarea id="description" name="description" required></textarea><br>
-        <label for="image">Product Image:</label>
-        <input type="file" id="image" name="image" accept="image/jpeg,image/png,image/gif"><br>
-        <div id="image-error" class="error"></div>
-        <div id="product-form-error" class="error"></div>
-        <button type="submit">Add Product</button>
-    </form>
-    <form id="category-form">
-        <h2>Manage Categories</h2>
-        <input type="hidden" name="csrfToken" id="csrfTokenCat">
-        <label for="category-name">Category Name:</label>
-        <input type="text" id="category-name" name="name" required><br>
-        <div id="category-form-error" class="error"></div>
-        <button type="submit">Add Category</button>
-    </form>
-    <form id="change-password-form">
-        <h2>Change Password</h2>
-        <input type="hidden" name="csrfToken" id="csrfTokenPass">
-        <label for="current-password">Current Password:</label>
-        <input type="password" id="current-password" name="currentPassword" required><br>
-        <label for="new-password">New Password:</label>
-        <input type="password" id="new-password" name="newPassword" required><br>
-        <div id="password-form-error" class="error"></div>
-        <button type="submit">Change Password</button>
-    </form>
-    <h2>Product List</h2>
-    <ul id="product-list"></ul>
-    <h2>Category List</h2>
-    <ul id="category-list"></ul>
-    <h2>Orders</h2>
-    <ul id="order-list"></ul>
-    <div class="admin-messages">
-        <h2>Customer Messages</h2>
-        <ul id="messages-list"></ul>
-    </div>
-    <script>
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function filledCell(cell) {
-            return cell !== '' && cell != null;
-        }
-        function loadFileData(filename) {
-            if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-                try {
-                    var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                    var firstSheetName = workbook.SheetNames[0];
-                    var worksheet = workbook.Sheets[firstSheetName];
-                    var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                    var filteredData = jsonData.filter(row => row.some(filledCell));
-                    var headerRowIndex = filteredData.findIndex((row, index) =>
-                        row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                    );
-                    if (headerRowIndex === -1 || headerRowIndex > 25) {
-                        headerRowIndex = 0;
-                    }
-                    var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex));
-                    csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                    return csv;
-                } catch (e) {
-                    console.error(e);
-                    return "";
-                }
-            }
-            return gk_fileData[filename] || "";
-        }
-    </script>
-    <script>
-        let csrfToken;
-
-        function validateTextInput(text, maxLength, fieldName) {
-            if (!text) return `${fieldName} is required`;
-            if (text.length > maxLength) return `${fieldName} must be ${maxLength} characters or less`;
-            if (!/^[a-zA-Z0-9\s\-,.!?]+$/.test(text)) return `${fieldName} contains invalid characters`;
-            return null;
-        }
-
-        function validatePrice(price) {
-            const num = parseFloat(price);
-            if (isNaN(num) || num < 0) return 'Price must be a non-negative number';
-            return null;
-        }
-
-        function validatePassword(password) {
-            if (password.length < 8 || password.length > 50) return 'Password must be 8-50 characters';
-            return null;
-        }
-
-        // 获取 CSRF token
-        fetch('https://ierg4210.eastasia.cloudapp.azure.com/csrf-token', { credentials: 'include' })
-            .then(res => {
-                if (!res.ok) throw new Error('CSRF fetch failed');
-                return res.json();
-            })
-            .then(data => {
-                csrfToken = data.csrfToken;
-                document.getElementById('csrfToken').value = csrfToken;
-                document.getElementById('csrfTokenCat').value = csrfToken;
-                document.getElementById('csrfTokenPass').value = csrfToken;
-                loadMessages(); // 加载消息
-            })
-            .catch(err => console.error('CSRF fetch error:', err));
-
-        // 检查管理员权限
-        fetch('https://ierg4210.eastasia.cloudapp.azure.com/user', { credentials: 'include' })
-            .then(res => res.json())
-            .then(data => {
-                if (data.email === 'Guest' || !data.isAdmin) {
-                    window.location.href = '/login';
-                }
-            })
-            .catch(err => console.error('User fetch error:', err));
-
-        // 加载消息
-        function loadMessages() {
-            fetch('https://ierg4210.eastasia.cloudapp.azure.com/admin-messages', { credentials: 'include' })
-                .then(response => {
-                    if (!response.ok) throw new Error('Messages fetch failed');
-                    return response.json();
-                })
-                .then(messages => {
-                    const messagesList = document.getElementById('messages-list');
-                    messagesList.innerHTML = '';
-                    messages.forEach(msg => {
-                        const li = document.createElement('li');
-                        li.className = 'message-item';
-                        li.innerHTML = DOMPurify.sanitize(`
-                            <div>
-                                <p><strong>User:</strong> ${msg.user_email}</p>
-                                <p><strong>Message:</strong> ${msg.content}</p>
-                                <p><strong>Time:</strong> ${new Date(msg.created_at).toLocaleString()}</p>
-                                <p><strong>Reply:</strong> ${msg.admin_reply || 'No reply yet'}</p>
-                                ${msg.admin_reply ? `<p><strong>Replied At:</strong> ${new Date(msg.replied_at).toLocaleString()}</p>` : ''}
-                                <textarea id="reply-${msg.message_id}" placeholder="Type your reply..." rows="3"></textarea>
-                                <button class="reply-button" data-message-id="${msg.message_id}">Reply</button>
-                                <span class="error" id="error-${msg.message_id}"></span>
-                            </div>
-                        `);
-                        messagesList.appendChild(li);
-                    });
-                    // 动态绑定事件
-                    document.querySelectorAll('.reply-button').forEach(button => {
-                        button.addEventListener('click', () => {
-                            const messageId = button.dataset.messageId;
-                            replyMessage(messageId, button);
-                        });
-                    });
-                })
-                .catch(err => console.error('Messages fetch error:', err));
-        }
-
-        // 发送回复
-        window.replyMessage = async (messageId, button) => {
-            const textarea = document.getElementById(`reply-${messageId}`);
-            const errorSpan = document.getElementById(`error-${messageId}`);
-            const reply = textarea.value.trim();
-            const error = validateTextInput(reply, 1000, 'Reply');
-            if (error) {
-                errorSpan.textContent = error;
-                return;
-            }
-            errorSpan.textContent = '';
-            button.disabled = true;
-            try {
-                const response = await fetch('https://ierg4210.eastasia.cloudapp.azure.com/reply-message', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-Token': csrfToken
-                    },
-                    body: JSON.stringify({ message_id: messageId, reply }),
-                    credentials: 'include'
-                });
-                const data = await response.json();
-                if (data.success) {
-                    textarea.value = '';
-                    loadMessages();
-                } else {
-                    errorSpan.textContent = 'Error replying: ' + data.error;
-                }
-            } catch (err) {
-                console.error('Reply message error:', err);
-                errorSpan.textContent = 'Error replying: Network error';
-            } finally {
-                button.disabled = false;
-            }
-        };
-
-        function loadCategories() {
-            fetch('https://ierg4210.eastasia.cloudapp.azure.com/categories')
-                .then(response => {
-                    if (!response.ok) throw new Error('Categories fetch failed');
-                    return response.json();
-                })
-                .then(categories => {
-                    const categorySelect = document.getElementById('category');
-                    categorySelect.innerHTML = '<option value="">-- Select a Category --</option>';
-                    categories.forEach(category => {
-                        const option = document.createElement('option');
-                        option.value = category.catid;
-                        option.textContent = category.name;
-                        categorySelect.appendChild(option);
-                    });
-                })
-                .catch(err => console.error('Categories error:', err));
-        }
-
-        function loadProducts() {
-            fetch('https://ierg4210.eastasia.cloudapp.azure.com/products')
-                .then(response => {
-                    if (!response.ok) throw new Error('Products fetch failed');
-                    return response.json();
-                })
-                .then(products => {
-                    const productList = document.getElementById('product-list');
-                    productList.innerHTML = '';
-                    products.forEach(product => {
-                        const li = document.createElement('li');
-                        li.innerHTML = DOMPurify.sanitize(`
-                            ${product.name} - $${product.price}
-                            <a href="/product?pid=${product.pid}" target="_blank">View</a>
-                            <button class="delete-product-button" data-pid="${product.pid}">Delete</button>
-                            <button class="edit-product-button" 
-                                    data-pid="${product.pid}" 
-                                    data-name="${product.name.replace(/"/g, '&quot;')}" 
-                                    data-price="${product.price}" 
-                                    data-description="${product.description.replace(/"/g, '&quot;')}" 
-                                    data-catid="${product.catid}">Edit</button>
-                        `);
-                        productList.appendChild(li);
-                    });
-                    // 绑定事件委托
-                    productList.addEventListener('click', (e) => {
-                        if (e.target.classList.contains('delete-product-button')) {
-                            const pid = e.target.dataset.pid;
-                            console.log('Delete product clicked for pid:', pid);
-                            deleteProduct(pid);
-                        } else if (e.target.classList.contains('edit-product-button')) {
-                            const { pid, name, price, description, catid } = e.target.dataset;
-                            console.log('Edit product clicked for pid:', pid, 'with data:', { name, price, description, catid });
-                            editProduct(pid, name, price, description, catid);
-                        }
-                    });
-                })
-                .catch(err => console.error('Products error:', err));
-        }
-
-        function loadCategoryList() {
-            fetch('https://ierg4210.eastasia.cloudapp.azure.com/categories')
-                .then(response => {
-                    if (!response.ok) throw new Error('Categories fetch failed');
-                    return response.json();
-                })
-                .then(categories => {
-                    const categoryList = document.getElementById('category-list');
-                    categoryList.innerHTML = '';
-                    categories.forEach(category => {
-                        const li = document.createElement('li');
-                        li.innerHTML = DOMPurify.sanitize(`
-                            ${category.name}
-                            <button class="delete-category-button" data-catid="${category.catid}">Delete</button>
-                            <button class="edit-category-button" 
-                                    data-catid="${category.catid}" 
-                                    data-name="${category.name.replace(/"/g, '&quot;')}">Edit</button>
-                        `);
-                        categoryList.appendChild(li);
-                    });
-                    // 绑定事件委托
-                    categoryList.addEventListener('click', (e) => {
-                        if (e.target.classList.contains('delete-category-button')) {
-                            const catid = e.target.dataset.catid;
-                            console.log('Delete category clicked for catid:', catid);
-                            deleteCategory(catid);
-                        } else if (e.target.classList.contains('edit-category-button')) {
-                            const { catid, name } = e.target.dataset;
-                            console.log('Edit category clicked for catid:', catid, 'with name:', name);
-                            editCategory(catid, name);
-                        }
-                    });
-                })
-                .catch(err => console.error('Category list error:', err));
-        }
-
-        function loadOrders() {
-            fetch('https://ierg4210.eastasia.cloudapp.azure.com/admin-orders', { credentials: 'include' })
-                .then(response => {
-                    if (!response.ok) throw new Error('Orders fetch failed');
-                    return response.json();
-                })
-                .then(orders => {
-                    const orderList = document.getElementById('order-list');
-                    orderList.innerHTML = '';
-                    orders.forEach(order => {
-                        const items = JSON.parse(order.items).map(item =>
-                            `Product #${item.pid}: ${item.quantity} x $${item.price.toFixed(2)}`
-                        ).join(', ');
-                        const li = document.createElement('li');
-                        li.innerHTML = DOMPurify.sanitize(`
-                            Order #${order.order_id} by ${order.email || 'Guest'}<br>
-                            Items: ${items}<br>
-                            Total: $${order.total_amount.toFixed(2)}<br>
-                            Status: ${order.status}<br>
-                            Created: ${new Date(order.created_at).toLocaleString()}
-                        `);
-                        orderList.appendChild(li);
-                    });
-                })
-                .catch(err => console.error('Orders error:', err));
-        }
-
-        function deleteProduct(pid) {
-            if (confirm('Are you sure?')) {
-                console.log('Sending DELETE request for product:', pid);
-                fetch(`https://ierg4210.eastasia.cloudapp.azure.com/delete-product/${pid}`, {
-                    method: 'DELETE',
-                    headers: { 'X-CSRF-Token': csrfToken },
-                    credentials: 'include'
-                })
-                    .then(response => {
-                        if (!response.ok) throw new Error('Delete product failed');
-                        return response.text();
-                    })
-                    .then(message => {
-                        alert(message);
-                        loadProducts();
-                    })
-                    .catch(err => console.error('Delete product error:', err));
-            }
-        }
-
-        function deleteCategory(catid) {
-            if (confirm('Are you sure?')) {
-                console.log('Sending DELETE request for category:', catid);
-                fetch(`https://ierg4210.eastasia.cloudapp.azure.com/delete-category/${catid}`, {
-                    method: 'DELETE',
-                    headers: { 'X-CSRF-Token': csrfToken },
-                    credentials: 'include'
-                })
-                    .then(response => {
-                        if (!response.ok) throw new Error('Delete category failed');
-                        return response.text();
-                    })
-                    .then(message => {
-                        alert(message);
-                        loadCategories();
-                        loadCategoryList();
-                    })
-                    .catch(err => console.error('Delete category error:', err));
-            }
-        }
-
-        function editProduct(pid, name, price, description, catid) {
-            const form = document.getElementById('product-form');
-            form.innerHTML = DOMPurify.sanitize(`
-                <h2>Edit Product</h2>
-                <input type="hidden" name="csrfToken" id="csrfToken" value="${csrfToken}">
-                <label for="category">Category:</label>
-                <select id="category" name="catid" required></select><br>
-                <label for="name">Product Name:</label>
-                <input type="text" id="name" name="name" value="${name.replace(/"/g, '&quot;')}" required><br>
-                <label for="price">Price:</label>
-                <input type="number" id="price" name="price" step="0.01" min="0" value="${price}" required><br>
-                <label for="description">Description:</label>
-                <textarea id="description" name="description" required>${description.replace(/"/g, '&quot;')}</textarea><br>
-                <label for="image">Product Image:</label>
-                <input type="file" id="image" name="image" accept="image/jpeg,image/png,image/gif"><br>
-                <div id="image-error" class="error"></div>
-                <div id="product-form-error" class="error"></div>
-                <button type="submit">Update Product</button>
-            `);
-            form.dataset.pid = pid;
-            form.dataset.original = document.getElementById('product-form').dataset.original || form.innerHTML;
-            loadCategories();
-            setTimeout(() => document.getElementById('category').value = catid, 100);
-        }
-
-        function editCategory(catid, name) {
-            const form = document.getElementById('category-form');
-            form.innerHTML = DOMPurify.sanitize(`
-                <h2>Edit Category</h2>
-                <input type="hidden" name="csrfToken" id="csrfTokenCat" value="${csrfToken}">
-                <label for="category-name">Category Name:</label>
-                <input type="text" id="category-name" name="name" value="${name.replace(/"/g, '&quot;')}" required><br>
-                <div id="category-form-error" class="error"></div>
-                <button type="submit">Update Category</button>
-            `);
-            form.dataset.catid = catid;
-            form.dataset.original = document.getElementById('category-form').dataset.original || form.innerHTML;
-        }
-
-        document.getElementById('product-form').addEventListener('submit', (e) => {
-            e.preventDefault();
-            const name = document.getElementById('name').value;
-            const price = document.getElementById('price').value;
-            const description = document.getElementById('description').value;
-            const catid = document.getElementById('category').value;
-            const imageFile = document.getElementById('image').files[0];
-            const errorDiv = document.getElementById('product-form-error');
-            const isUpdate = e.target.dataset.pid;
-
-            const nameError = validateTextInput(name, 255, 'Product name');
-            const descError = validateTextInput(description, 1000, 'Description');
-            const priceError = validatePrice(price);
-            if (nameError || descError || priceError || !catid) {
-                errorDiv.textContent = nameError || descError || priceError || 'Category is required';
-                return;
-            }
-
-            if (imageFile) {
-                if (imageFile.size > 10 * 1024 * 1024) {
-                    document.getElementById('image-error').textContent = 'Image size must be less than 10MB';
-                    return;
-                }
-                if (!['image/jpeg', 'image/png', 'image/gif'].includes(imageFile.type)) {
-                    document.getElementById('image-error').textContent = 'Invalid image type. Only JPEG, PNG, or GIF allowed';
-                    return;
-                }
-            }
-
-            const formData = new FormData(e.target);
-            const url = isUpdate ? `https://ierg4210.eastasia.cloudapp.azure.com/update-product/${isUpdate}` : 'https://ierg4210.eastasia.cloudapp.azure.com/add-product';
-            fetch(url, {
-                method: isUpdate ? 'PUT' : 'POST',
-                body: formData,
-                credentials: 'include'
-            })
-                .then(response => {
-                    if (!response.ok) throw new Error('Product operation failed');
-                    return response.text();
-                })
-                .then(message => {
-                    alert(message);
-                    if (isUpdate) {
-                        e.target.innerHTML = e.target.dataset.original;
-                        delete e.target.dataset.pid;
-                    } else {
-                        e.target.reset();
-                    }
-                    document.getElementById('csrfToken').value = csrfToken;
-                    loadProducts();
-                })
-                .catch(err => {
-                    console.error('Product form error:', err);
-                    errorDiv.textContent = err.message;
-                });
-        });
-
-        document.getElementById('category-form').addEventListener('submit', (e) => {
-            e.preventDefault();
-            const name = document.getElementById('category-name').value;
-            const errorDiv = document.getElementById('category-form-error');
-            const isUpdate = e.target.dataset.catid;
-
-            const nameError = validateTextInput(name, 255, 'Category name');
-            if (nameError) {
-                errorDiv.textContent = nameError;
-                return;
-            }
-
-            const url = isUpdate ? `https://ierg4210.eastasia.cloudapp.azure.com/update-category/${isUpdate}` : 'https://ierg4210.eastasia.cloudapp.azure.com/add-category';
-            fetch(url, {
-                method: isUpdate ? 'PUT' : 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, csrfToken }),
-                credentials: 'include'
-            })
-                .then(response => {
-                    if (!response.ok) throw new Error('Category operation failed');
-                    return response.text();
-                })
-                .then(message => {
-                    alert(message);
-                    if (isUpdate) {
-                        e.target.innerHTML = e.target.dataset.original;
-                        delete e.target.dataset.catid;
-                    } else {
-                        e.target.reset();
-                    }
-                    document.getElementById('csrfTokenCat').value = csrfToken;
-                    loadCategories();
-                    loadCategoryList();
-                })
-                .catch(err => {
-                    console.error('Category form error:', err);
-                    errorDiv.textContent = err.message;
-                });
-        });
-
-        document.getElementById('change-password-form').addEventListener('submit', (e) => {
-            e.preventDefault();
-            const currentPassword = document.getElementById('current-password').value;
-            const newPassword = document.getElementById('new-password').value;
-            const errorDiv = document.getElementById('password-form-error');
-
-            const currentPassError = validatePassword(currentPassword);
-            const newPassError = validatePassword(newPassword);
-            if (currentPassError || newPassError) {
-                errorDiv.textContent = currentPassError || newPassError;
-                return;
-            }
-
-            const formData = new FormData(e.target);
-            fetch('https://ierg4210.eastasia.cloudapp.azure.com/change-password', {
-                method: 'POST',
-                body: formData,
-                credentials: 'include'
-            })
-                .then(response => {
-                    if (!response.ok) {
-                        return response.text().then(text => { throw new Error(text); });
-                    }
-                })
-                .catch(err => {
-                    console.error('Password change error:', err);
-                    errorDiv.textContent = 'Password change failed: ' + err.message;
-                });
-        });
-
-        window.addEventListener('load', () => {
-            document.getElementById('product-form').dataset.original = document.getElementById('product-form').innerHTML;
-            document.getElementById('category-form').dataset.original = document.getElementById('category-form').innerHTML;
-            loadCategories();
-            loadProducts();
-            loadCategoryList();
-            loadOrders();
-            setInterval(loadMessages, 10000); // 每 10 秒轮询
-        });
-    </script>
-    <script>(function () { function c() { var b = a.contentDocument || a.contentWindow.document; if (b) { var d = b.createElement('script'); d.innerHTML = "window.__CF$cv$params={r:'9353a7e07dc3b0b7',t:'MTc0NTQ3NzMxNC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);"; b.getElementsByTagName('head')[0].appendChild(d) } } if (document.body) { var a = document.createElement('iframe'); a.height = 1; a.width = 1; a.style.position = 'absolute'; a.style.top = 0; a.style.left = 0; a.style.border = 'none'; a.style.visibility = 'hidden'; document.body.appendChild(a); if ('loading' !== document.readyState) c(); else if (window.addEventListener) document.addEventListener('DOMContentLoaded', c); else { var e = document.onreadystatechange || function () { }; document.onreadystatechange = function (b) { e(b); 'loading' !== document.readyState && (document.onreadystatechange = e, c()) } } } })();</script>
-    <script>(function () { function c() { var b = a.contentDocument || a.contentWindow.document; if (b) { var d = b.createElement('script'); d.innerHTML = "window.__CF$cv$params={r:'935462d62e31bd28',t:'MTc0NTQ4NDk3Mi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);"; b.getElementsByTagName('head')[0].appendChild(d) } } if (document.body) { var a = document.createElement('iframe'); a.height = 1; a.width = 1; a.style.position = 'absolute'; a.style.top = 0; a.style.left = 0; a.style.border = 'none'; a.style.visibility = 'hidden'; document.body.appendChild(a); if ('loading' !== document.readyState) c(); else if (window.addEventListener) document.addEventListener('DOMContentLoaded', c); else { var e = document.onreadystatechange || function () { }; document.onreadystatechange = function (b) { e(b); 'loading' !== document.readyState && (document.onreadystatechange = e, c()) } } } })();</script>
-    <script>(function () { function c() { var b = a.contentDocument || a.contentWindow.document; if (b) { var d = b.createElement('script'); d.innerHTML = "window.__CF$cv$params={r:'9355c62f98f253e5',t:'MTc0NTQ5OTUyNy4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);"; b.getElementsByTagName('head')[0].appendChild(d) } } if (document.body) { var a = document.createElement('iframe'); a.height = 1; a.width = 1; a.style.position = 'absolute'; a.style.top = 0; a.style.left = 0; a.style.border = 'none'; a.style.visibility = 'hidden'; document.body.appendChild(a); if ('loading' !== document.readyState) c(); else if (window.addEventListener) document.addEventListener('DOMContentLoaded', c); else { var e = document.onreadystatechange || function () { }; document.onreadystatechange = function (b) { e(b); 'loading' !== document.readyState && (document.onreadystatechange = e, c()) } } } })();</script>
-    <script>(function () { function c() { var b = a.contentDocument || a.contentWindow.document; if (b) { var d = b.createElement('script'); d.innerHTML = "window.__CF$cv$params={r:'93d857516ec7b058',t:'MTc0Njg2ODYyMS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);"; b.getElementsByTagName('head')[0].appendChild(d) } } if (document.body) { var a = document.createElement('iframe'); a.height = 1; a.width = 1; a.style.position = 'absolute'; a.style.top = 0; a.style.left = 0; a.style.border = 'none'; a.style.visibility = 'hidden'; document.body.appendChild(a); if ('loading' !== document.readyState) c(); else if (window.addEventListener) document.addEventListener('DOMContentLoaded', c); else { var e = document.onreadystatechange || function () { }; document.onreadystatechange = function (b) { e(b); 'loading' !== document.readyState && (document.onreadystatechange = e, c()) } } } })();</script>
-    <script>(function () { function c() { var b = a.contentDocument || a.contentWindow.document; if (b) { var d = b.createElement('script'); d.innerHTML = "window.__CF$cv$params={r:'93d89866fa01dd20',t:'MTc0Njg3MTI4Ni4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);"; b.getElementsByTagName('head')[0].appendChild(d) } } if (document.body) { var a = document.createElement('iframe'); a.height = 1; a.width = 1; a.style.position = 'absolute'; a.style.top = 0; a.style.left = 0; a.style.border = 'none'; a.style.visibility = 'hidden'; document.body.appendChild(a); if ('loading' !== document.readyState) c(); else if (window.addEventListener) document.addEventListener('DOMContentLoaded', c); else { var e = document.onreadystatechange || function () { }; document.onreadystatechange = function (b) { e(b); 'loading' !== document.readyState && (document.onreadystatechange = e, c()) } } } })();</script>
-    <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'93daffd5591fe592',t:'MTc0Njg5NjQ5NS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script>
-</body>
-
+   <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Admin Panel</title>
+      <link rel="stylesheet" href="/styles/admin.css">
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+   </head>
+   <body>
+      <h1>Admin Panel</h1>
+      <p class="admin-back-link"><a href="/">← Back to Home</a></p>
+      <form id="product-form">
+         <h2>Manage Products</h2>
+         <input type="hidden" name="csrfToken" id="csrfToken">
+         <label for="category">Category:</label>
+         <select id="category" name="catid" required></select><br>
+         <label for="name">Product Name:</label>
+         <input type="text" id="name" name="name" required><br>
+         <label for="price">Price:</label>
+         <input type="number" id="price" name="price" step="0.01" min="0" required><br>
+         <label for="description">Description:</label>
+         <textarea id="description" name="description" required></textarea>
+         <br>
+         <label for="image">Product Image:</label>
+         <input type="file" id="image" name="image" accept="image/jpeg,image/png,image/gif"><br>
+         <div id="image-error" class="error"></div>
+         <div id="product-form-error" class="error"></div>
+         <button type="submit">Add Product</button>
+      </form>
+      <form id="category-form">
+         <h2>Manage Categories</h2>
+         <input type="hidden" name="csrfToken" id="csrfTokenCat">
+         <label for="category-name">Category Name:</label>
+         <input type="text" id="category-name" name="name" required><br>
+         <div id="category-form-error" class="error"></div>
+         <button type="submit">Add Category</button>
+      </form>
+      <form id="change-password-form">
+         <h2>Change Password</h2>
+         <input type="hidden" name="csrfToken" id="csrfTokenPass">
+         <label for="current-password">Current Password:</label>
+         <input type="password" id="current-password" name="currentPassword" required><br>
+         <label for="new-password">New Password:</label>
+         <input type="password" id="new-password" name="newPassword" required><br>
+         <div id="password-form-error" class="error"></div>
+         <button type="submit">Change Password</button>
+      </form>
+      <h2>Product List</h2>
+      <ul id="product-list"></ul>
+      <h2>Category List</h2>
+      <ul id="category-list"></ul>
+      <h2>Orders</h2>
+      <ul id="order-list"></ul>
+      <script>
+         let csrfToken;
+         
+         function validateTextInput(text, maxLength, fieldName) {
+             if (!text) return `${fieldName} is required`;
+             if (text.length > maxLength) return `${fieldName} must be ${maxLength} characters or less`;
+             if (!/^[a-zA-Z0-9\s\-,.]+$/.test(text)) return `${fieldName} contains invalid characters`;
+             return null;
+         }
+         
+         function validatePrice(price) {
+             const num = parseFloat(price);
+             if (isNaN(num) || num < 0) return 'Price must be a non-negative number';
+             return null;
+         }
+         
+         function validatePassword(password) {
+             if (password.length < 8 || password.length > 50) return 'Password must be 8-50 characters';
+             return null;
+         }
+         
+         fetch('https://ierg4210.eastasia.cloudapp.azure.com/user', { credentials: 'include' })
+             .then(res => res.json())
+             .then(data => {
+                 if (data.email === 'Guest') {
+                     window.location.href = '/login';
+                 }
+             });
+         
+         fetch('https://ierg4210.eastasia.cloudapp.azure.com/csrf-token', { credentials: 'include' })
+             .then(res => res.json())
+             .then(data => {
+                 csrfToken = data.csrfToken;
+                 document.getElementById('csrfToken').value = csrfToken;
+                 document.getElementById('csrfTokenCat').value = csrfToken;
+                 document.getElementById('csrfTokenPass').value = csrfToken;
+             })
+             .catch(err => console.error('CSRF fetch error:', err));
+         
+         function loadCategories() {
+             fetch('https://ierg4210.eastasia.cloudapp.azure.com/categories')
+                 .then(response => {
+                     if (!response.ok) throw new Error('Categories fetch failed');
+                     return response.json();
+                 })
+                 .then(categories => {
+                     const categorySelect = document.getElementById('category');
+                     categorySelect.innerHTML = '<option value="">-- Select a Category --</option>';
+                     categories.forEach(category => {
+                         const option = document.createElement('option');
+                         option.value = category.catid;
+                         option.textContent = category.name;
+                         categorySelect.appendChild(option);
+                     });
+                 })
+                 .catch(err => console.error('Categories error:', err));
+         }
+         
+         function loadProducts() {
+             fetch('https://ierg4210.eastasia.cloudapp.azure.com/products')
+                 .then(response => {
+                     if (!response.ok) throw new Error('Products fetch failed');
+                     return response.json();
+                 })
+                 .then(products => {
+                     const productList = document.getElementById('product-list');
+                     productList.innerHTML = '';
+                     products.forEach(product => {
+                         const li = document.createElement('li');
+                         li.innerHTML = DOMPurify.sanitize(`
+                             ${product.name} - $${product.price}
+                             <a href="/product?pid=${product.pid}" target="_blank">View</a>
+                             <button onclick="deleteProduct(${product.pid})">Delete</button>
+                             <button onclick="editProduct(${product.pid}, '${product.name}', ${product.price}, '${product.description}', ${product.catid})">Edit</button>
+                         `);
+                         productList.appendChild(li);
+                     });
+                 })
+                 .catch(err => console.error('Products error:', err));
+         }
+         
+         function loadCategoryList() {
+             fetch('https://ierg4210.eastasia.cloudapp.azure.com/categories')
+                 .then(response => {
+                     if (!response.ok) throw new Error('Categories fetch failed');
+                     return response.json();
+                 })
+                 .then(categories => {
+                     const categoryList = document.getElementById('category-list');
+                     categoryList.innerHTML = '';
+                     categories.forEach(category => {
+                         const li = document.createElement('li');
+                         li.innerHTML = DOMPurify.sanitize(`
+                             ${category.name}
+                             <button onclick="deleteCategory(${category.catid})">Delete</button>
+                             <button onclick="editCategory(${category.catid}, '${category.name}')">Edit</button>
+                         `);
+                         categoryList.appendChild(li);
+                     });
+                 })
+                 .catch(err => console.error('Category list error:', err));
+         }
+         
+         function loadOrders() {
+             fetch('https://ierg4210.eastasia.cloudapp.azure.com/admin-orders', { credentials: 'include' })
+                 .then(response => {
+                     if (!response.ok) throw new Error('Orders fetch failed');
+                     return response.json();
+                 })
+                 .then(orders => {
+                     const orderList = document.getElementById('order-list');
+                     orderList.innerHTML = '';
+                     orders.forEach(order => {
+                         const items = JSON.parse(order.items).map(item => 
+                             `Product #${item.pid}: ${item.quantity} x $${item.price.toFixed(2)}`
+                         ).join(', ');
+                         const li = document.createElement('li');
+                         li.innerHTML = DOMPurify.sanitize(`
+                             Order #${order.order_id} by ${order.email || 'Guest'}<br>
+                             Items: ${items}<br>
+                             Total: $${order.total_amount.toFixed(2)}<br>
+                             Status: ${order.status}<br>
+                             Created: ${new Date(order.created_at).toLocaleString()}
+                         `);
+                         orderList.appendChild(li);
+                     });
+                 })
+                 .catch(err => console.error('Orders error:', err));
+         }
+         
+         document.getElementById('product-form').addEventListener('submit', (e) => {
+             e.preventDefault();
+             const name = document.getElementById('name').value;
+             const price = document.getElementById('price').value;
+             const description = document.getElementById('description').value;
+             const catid = document.getElementById('category').value;
+             const imageFile = document.getElementById('image').files[0];
+             const errorDiv = document.getElementById('product-form-error');
+             const isUpdate = e.target.dataset.pid;
+         
+             const nameError = validateTextInput(name, 255, 'Product name');
+             const descError = validateTextInput(description, 1000, 'Description');
+             const priceError = validatePrice(price);
+             if (nameError || descError || priceError || !catid) {
+                 errorDiv.textContent = nameError || descError || priceError || 'Category is required';
+                 return;
+             }
+         
+             if (imageFile) {
+                 if (imageFile.size > 10 * 1024 * 1024) {
+                     document.getElementById('image-error').textContent = 'Image size must be less than 10MB';
+                     return;
+                 }
+                 if (!['image/jpeg', 'image/png', 'image/gif'].includes(imageFile.type)) {
+                     document.getElementById('image-error').textContent = 'Invalid image type. Only JPEG, PNG, or GIF allowed';
+                     return;
+                 }
+             }
+         
+             const formData = new FormData(e.target);
+             const url = isUpdate ? `https://ierg4210.eastasia.cloudapp.azure.com/update-product/${isUpdate}` : 'https://ierg4210.eastasia.cloudapp.azure.com/add-product';
+             fetch(url, {
+                 method: isUpdate ? 'PUT' : 'POST',
+                 body: formData,
+                 credentials: 'include'
+             })
+                 .then(response => {
+                     if (!response.ok) throw new Error('Product operation failed');
+                     return response.text();
+                 })
+                 .then(message => {
+                     alert(message);
+                     if (isUpdate) {
+                         e.target.innerHTML = e.target.dataset.original;
+                         delete e.target.dataset.pid;
+                     } else {
+                         e.target.reset();
+                     }
+                     document.getElementById('csrfToken').value = csrfToken;
+                     loadProducts();
+                 })
+                 .catch(err => {
+                     console.error('Product form error:', err);
+                     errorDiv.textContent = err.message;
+                 });
+         });
+         
+         document.getElementById('category-form').addEventListener('submit', (e) => {
+             e.preventDefault();
+             const name = document.getElementById('category-name').value;
+             const errorDiv = document.getElementById('category-form-error');
+             const isUpdate = e.target.dataset.catid;
+         
+             const nameError = validateTextInput(name, 255, 'Category name');
+             if (nameError) {
+                 errorDiv.textContent = nameError;
+                 return;
+             }
+         
+             const url = isUpdate ? `https://ierg4210.eastasia.cloudapp.azure.com/update-category/${isUpdate}` : 'https://ierg4210.eastasia.cloudapp.azure.com/add-category';
+             fetch(url, {
+                 method: isUpdate ? 'PUT' : 'POST',
+                 headers: { 'Content-Type': 'application/json' },
+                 body: JSON.stringify({ name, csrfToken }),
+                 credentials: 'include'
+             })
+                 .then(response => {
+                     if (!response.ok) throw new Error('Category operation failed');
+                     return response.text();
+                 })
+                 .then(message => {
+                     alert(message);
+                     if (isUpdate) {
+                         e.target.innerHTML = e.target.dataset.original;
+                         delete e.target.dataset.catid;
+                     } else {
+                         e.target.reset();
+                     }
+                     document.getElementById('csrfTokenCat').value = csrfToken;
+                     loadCategories();
+                     loadCategoryList();
+                 })
+                 .catch(err => {
+                     console.error('Category form error:', err);
+                     errorDiv.textContent = err.message;
+                 });
+         });
+         
+         document.getElementById('change-password-form').addEventListener('submit', (e) => {
+             e.preventDefault();
+             const currentPassword = document.getElementById('current-password').value;
+             const newPassword = document.getElementById('new-password').value;
+             const errorDiv = document.getElementById('password-form-error');
+         
+             const currentPassError = validatePassword(currentPassword);
+             const newPassError = validatePassword(newPassword);
+             if (currentPassError || newPassError) {
+                 errorDiv.textContent = currentPassError || newPassError;
+                 return;
+             }
+         
+             const formData = new FormData(e.target);
+             fetch('https://ierg4210.eastasia.cloudapp.azure.com/change-password', {
+                 method: 'POST',
+                 body: formData,
+                 credentials: 'include'
+             })
+                 .then(response => {
+                     if (!response.ok) {
+                         return response.text().then(text => { throw new Error(text); });
+                     }
+                 })
+                 .catch(err => {
+                     console.error('Password change error:', err);
+                     errorDiv.textContent = 'Password change failed: ' + err.message;
+                 });
+         });
+         
+         function deleteProduct(pid) {
+             if (confirm('Are you sure?')) {
+                 fetch(`https://ierg4210.eastasia.cloudapp.azure.com/delete-product/${pid}`, {
+                     method: 'DELETE',
+                     headers: { 'X-CSRF-Token': csrfToken },
+                     credentials: 'include'
+                 })
+                     .then(response => {
+                         if (!response.ok) throw new Error('Delete product failed');
+                         return response.text();
+                     })
+                     .then(message => {
+                         alert(message);
+                         loadProducts();
+                     })
+                     .catch(err => console.error('Delete product error:', err));
+             }
+         }
+         
+         function deleteCategory(catid) {
+             if (confirm('Are you sure?')) {
+                 fetch(`https://ierg4210.eastasia.cloudapp.azure.com/delete-category/${catid}`, {
+                     method: 'DELETE',
+                     headers: { 'X-CSRF-Token': csrfToken },
+                     credentials: 'include'
+                 })
+                     .then(response => {
+                         if (!response.ok) throw new Error('Delete category failed');
+                         return response.text();
+                     })
+                     .then(message => {
+                         alert(message);
+                         loadCategories();
+                         loadCategoryList();
+                     })
+                     .catch(err => console.error('Delete category error:', err));
+             }
+         }
+         
+         function editProduct(pid, name, price, description, catid) {
+             const form = document.getElementById('product-form');
+             form.innerHTML = DOMPurify.sanitize(`
+                 <h2>Edit Product</h2>
+                 <input type="hidden" name="csrfToken" id="csrfToken" value="${csrfToken}">
+                 <label for="category">Category:</label>
+                 <select id="category" name="catid" required></select><br>
+                 <label for="name">Product Name:</label>
+                 <input type="text" id="name" name="name" value="${name}" required><br>
+                 <label for="price">Price:</label>
+                 <input type="number" id="price" name="price" step="0.01" min="0" value="${price}" required><br>
+                 <label for="description">Description:</label>
+                 <textarea id="description" name="description" required>${description}</textarea><br>
+                 <label for="image">Product Image:</label>
+                 <input type="file" id="image" name="image" accept="image/jpeg,image/png,image/gif"><br>
+                 <div id="image-error" class="error"></div>
+                 <div id="product-form-error" class="error"></div>
+                 <button type="submit">Update Product</button>
+             `);
+             form.dataset.pid = pid;
+             form.dataset.original = document.getElementById('product-form').dataset.original || form.innerHTML;
+             loadCategories();
+             setTimeout(() => document.getElementById('category').value = catid, 100);
+         }
+         
+         function editCategory(catid, name) {
+             const form = document.getElementById('category-form');
+             form.innerHTML = DOMPurify.sanitize(`
+                 <h2>Edit Category</h2>
+                 <input type="hidden" name="csrfToken" id="csrfTokenCat" value="${csrfToken}">
+                 <label for="category-name">Category Name:</label>
+                 <input type="text" id="category-name" name="name" value="${name}" required><br>
+                 <div id="category-form-error" class="error"></div>
+                 <button type="submit">Update Category</button>
+             `);
+             form.dataset.catid = catid;
+             form.dataset.original = document.getElementById('category-form').dataset.original || form.innerHTML;
+         }
+         
+         window.addEventListener('load', () => {
+             document.getElementById('product-form').dataset.original = document.getElementById('product-form').innerHTML;
+             document.getElementById('category-form').dataset.original = document.getElementById('category-form').innerHTML;
+             loadCategories();
+             loadProducts();
+             loadCategoryList();
+             loadOrders();
+         });
+      </script>
+      <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9353a7e07dc3b0b7',t:'MTc0NTQ3NzMxNC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script>
+   <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'935462d62e31bd28',t:'MTc0NTQ4NDk3Mi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9355c62f98f253e5',t:'MTc0NTQ5OTUyNy4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
