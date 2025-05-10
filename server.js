@@ -44,7 +44,7 @@ db.getConnection((err, connection) => {
 
 // Middleware
 app.use(cors({
-    origin: 'https://ierg4210.eastasia.cloudapp.azure.com',
+    origin: ['https://ierg4210.eastasia.cloudapp.azure.com', 'https://s37.ierg4210.ie.cuhk.edu.hk'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token']
