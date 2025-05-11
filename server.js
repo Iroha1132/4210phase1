@@ -96,21 +96,21 @@ const isAdmin = (req, res, next) => {
     next();
 };
 
-// Input Validation
-const validateTextInput = (text, maxLength, fieldName) => {
-    if (!text || typeof text !== 'string') return `${fieldName} is required`;
-    if (text.length > maxLength) return `${fieldName} must be ${maxLength} characters or less`;
-    if (!/^[a-zA-Z0-9\s\-,.]+$/.test(text)) return `${fieldName} contains invalid characters`;
-    return null;
-};
-
 const validatePrice = (price) => {
     const num = parseFloat(price);
     if (isNaN(num) || num < 0) return 'Price must be a non-negative number';
     return null;
 };
 
-// Escape HTML function
+// 输入验证函数（用于消息内容验证）
+const validateTextInput = (text, maxLength, fieldName) => {
+    if (!text || typeof text !== 'string') return `${fieldName} is required`;
+    if (text.length > maxLength) return `${fieldName} must be ${maxLength} characters or less`;
+    if (!/^[a-zA-Z0-9\s\-,.!?]+$/.test(text)) return `${fieldName} contains invalid characters`;
+    return null;
+};
+
+// HTML 转义函数（用于消息内容安全处理）
 const escapeHtml = (text) => sanitizeHtml(text, { allowedTags: [], allowedAttributes: {} });
 
 // Routes for HTML pages
@@ -637,6 +637,92 @@ app.post('/add-category', validateCsrfToken, authenticate, isAdmin, async (req, 
         }
         res.send('Category added');
     });
+});
+
+// 发送消息
+app.post('/send-message', validateCsrfToken, authenticate, async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
+    
+    const { content } = req.body;
+    const contentError = validateTextInput(content, 1000, 'Message content');
+    if (contentError) return res.status(400).json({ error: contentError });
+
+    const sanitizedContent = sanitizeHtml(content);
+    try {
+        await db.query('INSERT INTO messages (user_email, content) VALUES (?, ?)', [req.user.email, sanitizedContent]);
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Send message error:', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+// 获取用户消息
+app.get('/messages', authenticate, async (req, res) => {
+    if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
+    
+    try {
+        const [messages] = await db.query(
+            'SELECT message_id, user_email, content, created_at, admin_reply, replied_at FROM messages WHERE user_email = ? ORDER BY created_at ASC',
+            [req.user.email]
+        );
+        res.json(messages.map(msg => ({
+            message_id: msg.message_id,
+            user_email: msg.user_email,
+            content: escapeHtml(msg.content),
+            created_at: msg.created_at,
+            admin_reply: msg.admin_reply ? escapeHtml(msg.admin_reply) : null,
+            replied_at: msg.replied_at
+        })));
+    } catch (err) {
+        console.error('Fetch messages error:', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+// 获取管理员消息（所有用户的消息）
+app.get('/admin-messages', authenticate, isAdmin, async (req, res) => {
+    try {
+        const [messages] = await db.query('SELECT * FROM messages ORDER BY created_at DESC');
+        res.json(messages.map(msg => ({
+            message_id: msg.message_id,
+            user_email: msg.user_email,
+            content: escapeHtml(msg.content),
+            created_at: msg.created_at,
+            admin_reply: msg.admin_reply ? escapeHtml(msg.admin_reply) : null,
+            replied_at: msg.replied_at
+        })));
+    } catch (err) {
+        console.error('Fetch admin messages error:', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+// 管理员回复消息
+app.post('/reply-message', validateCsrfToken, authenticate, isAdmin, async (req, res) => {
+    const { message_id, reply } = req.body;
+    const replyError = validateTextInput(reply, 1000, 'Reply content');
+    if (replyError || !message_id) {
+        console.error('Reply validation error:', { message_id, replyError });
+        return res.status(400).json({ error: replyError || 'Message ID is required' });
+    }
+
+    const sanitizedReply = sanitizeHtml(reply);
+    try {
+        const [result] = await db.query(
+            'UPDATE messages SET admin_reply = ?, replied_at = NOW() WHERE message_id = ?',
+            [sanitizedReply, message_id]
+        );
+        if (result.affectedRows === 0) {
+            console.error('Message not found:', message_id);
+            return res.status(404).json({ error: 'Message not found' });
+        }
+        console.log('Reply sent:', { message_id, reply: sanitizedReply });
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Reply message error:', err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
 });
 
 app.put('/update-category/:catid', validateCsrfToken, authenticate, isAdmin, async (req, res) => {
