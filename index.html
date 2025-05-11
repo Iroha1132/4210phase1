@@ -271,7 +271,7 @@
                     });
                     if (!response.ok) throw new Error('Messages fetch failed');
                     const messages = await response.json();
-                    console.log('Messages fetched:', messages); // Added from second version
+                    console.log('Messages fetched:', messages);
                     chatMessages.innerHTML = '';
                     messages.forEach(msg => {
                         const div = document.createElement('div');
