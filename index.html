@@ -1,187 +1,168 @@
 <!DOCTYPE html>
 <html lang="en">
-
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dummy Shopping Website</title>
-    <link rel="stylesheet" href="/styles/main.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
-</head>
-
-<body>
-    <header>
-        <h1>Dummy Shopping Website</h1>
-        <nav>
+   <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Dummy Shopping Website</title>
+      <link rel="stylesheet" href="/styles/main.css">
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+   </head>
+   <body>
+      <header>
+         <h1>Dummy Shopping Website</h1>
+         <nav>
             <ul>
-                <li><a href="/">Home</a></li>
-                <li><a href="#">Categories</a></li>
-                <li><a href="#">About</a></li>
-                <li><a href="/admin" id="admin-link" style="display: none;">Admin</a></li>
-                <li><a href="/orders" id="orders-link" style="display: none;">My Orders</a></li>
-                <li>
-                    <form id="logout-form" method="POST" action="/logout"><button type="submit" id="logout-link"
-                            style="display: none;">Logout</button></form>
-                </li>
+               <li><a href="/">Home</a></li>
+               <li><a href="#">Categories</a></li>
+               <li><a href="#">About</a></li>
+               <li><a href="/admin" id="admin-link" style="display: none;">Admin</a></li>
+               <li><a href="/orders" id="orders-link" style="display: none;">My Orders</a></li>
+               <li>
+                  <form id="logout-form" method="POST" action="/logout"><button type="submit" id="logout-link" style="display: none;">Logout</button></form>
+               </li>
             </ul>
-        </nav>
-        <button id="user-status" class="user-status">Guest</button>
-        <button id="cart-button" class="cart-button">Cart (0)</button>
-    </header>
-    <section class="breadcrumb">
-        <p><a href="/">Home</a> > <span id="breadcrumb-category">All Categories</span></p>
-    </section>
-    <section class="category-select">
-        <label for="category-select">Select Category:</label>
-        <select id="category-select">
+         </nav>
+         <button id="user-status" class="user-status">Guest</button>
+         <button id="cart-button" class="cart-button">Cart (0)</button>
+      </header>
+      <section class="breadcrumb">
+         <p><a href="/">Home</a> > <span id="breadcrumb-category">All Categories</span></p>
+      </section>
+      <section class="category-select">
+         <label for="category-select">Select Category:</label>
+         <select id="category-select">
             <option value="">-- Select a Category --</option>
-        </select>
-    </section>
-    <section class="product-list" id="product-list"></section>
-    <div id="shopping-cart" class="shopping-cart">
-        <button class="close-cart">×</button>
-        <h3>Shopping Cart</h3>
-        <ul class="cart-items"></ul>
-    </div>
-    <div id="chatbox" class="chatbox" style="display: none;">
-        <button id="chat-button" class="chat-button">💬</button>
-        <div id="chat-window" class="chat-window">
-            <div class="chat-header">
-                <span>Customer Support</span>
-                <button id="chat-close" class="close-chat">×</button>
-            </div>
-            <div id="chat-messages" class="chat-messages"></div>
-            <div class="chat-input">
-                <input type="text" id="message-input" placeholder="Type your message...">
-                <button id="send-message">Send</button>
-                <span id="chat-error" class="error"></span>
-            </div>
-        </div>
-    </div>
-    <footer>
-        <p>© 2025 Dummy Shopping Website</p>
-    </footer>
-    <script src="/cart.js"></script>
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            // 获取分离的 CSRF token
-            let chatCsrfToken, logoutCsrfToken;
-
-            // 为聊天功能获取 CSRF token
-            fetch('https://ierg4210.eastasia.cloudapp.azure.com/csrf-token', { credentials: 'include' })
-                .then(res => {
-                    if (!res.ok) throw new Error('CSRF fetch failed');
-                    return res.json();
-                })
-                .then(data => {
-                    chatCsrfToken = data.csrfToken; // 用于聊天
-                    console.log('Chat CSRF token:', chatCsrfToken);
-                    initChat(chatCsrfToken);
-                })
-                .catch(err => console.error('CSRF fetch error for chat:', err));
-
-            // 为登出表单获取 CSRF token
-            fetch('https://ierg4210.eastasia.cloudapp.azure.com/csrf-token', { credentials: 'include' })
-                .then(res => {
-                    if (!res.ok) throw new Error('CSRF fetch failed');
-                    return res.json();
-                })
-                .then(data => {
-                    logoutCsrfToken = data.csrfToken; // 用于登出
-                    console.log('Logout CSRF token:', logoutCsrfToken);
-                    const logoutForm = document.getElementById('logout-form');
-                    logoutForm.insertAdjacentHTML('afterbegin', `<input type="hidden" name="csrfToken" value="${logoutCsrfToken}">`);
-
-                    // 添加登出表单提交处理
-                    logoutForm.addEventListener('submit', async (e) => {
-                        e.preventDefault();
-                        const button = logoutForm.querySelector('button[type="submit"]');
-                        button.disabled = true;
-
-                        try {
-                            const response = await fetch('https://ierg4210.eastasia.cloudapp.azure.com/logout', {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    'X-CSRF-Token': logoutCsrfToken
-                                },
-                                credentials: 'include'
-                            });
-
-                            if (!response.ok) throw new Error('Logout failed');
-
-                            const result = await response.json();
-                            if (result.csrfToken) {
-                                document.querySelector('#logout-form input[name="csrfToken"]').value = result.csrfToken;
-                                logoutCsrfToken = result.csrfToken; // 更新 token
-                            }
-                            window.location.href = result.redirect || '/login';
-                        } catch (err) {
-                            console.error('Logout error:', err);
-                            // 在错误时获取新的 CSRF token
-                            fetch('https://ierg4210.eastasia.cloudapp.azure.com/csrf-token', { credentials: 'include' })
-                                .then(res => {
-                                    if (!res.ok) throw new Error('CSRF fetch failed');
-                                    return res.json();
-                                })
-                                .then(data => {
-                                    document.querySelector('#logout-form input[name="csrfToken"]').value = data.csrfToken;
-                                    logoutCsrfToken = data.csrfToken; // 更新 token
-                                    window.location.href = '/login';
-                                })
-                                .catch(csrfErr => {
-                                    console.error('CSRF fetch error during logout:', csrfErr);
-                                    window.location.href = '/login';
-                                });
-                        } finally {
-                            button.disabled = false;
-                        }
-                    });
-                })
-                .catch(err => console.error('CSRF fetch error for logout:', err));
-
-            if (document.getElementById('category-select')) {
-                fetch('https://ierg4210.eastasia.cloudapp.azure.com/categories')
-                    .then(response => {
-                        if (!response.ok) throw new Error('Categories fetch failed');
-                        return response.json();
-                    })
-                    .then(categories => {
-                        const categorySelect = document.getElementById('category-select');
-                        categories.forEach(category => {
-                            const option = document.createElement('option');
-                            option.value = category.catid;
-                            option.textContent = category.name;
-                            categorySelect.appendChild(option);
-                        });
-
-                        const urlParams = new URLSearchParams(window.location.search);
-                        const catid = urlParams.get('catid');
-                        if (catid) {
-                            categorySelect.value = catid;
-                            loadProducts(catid);
-                            document.getElementById('breadcrumb-category').textContent = categorySelect.options[categorySelect.selectedIndex].text;
-                        } else {
-                            loadProducts();
-                        }
-                    })
-                    .catch(err => console.error('Categories error:', err));
-            }
-
-            function loadProducts(catid = null) {
-                const url = catid ? `https://ierg4210.eastasia.cloudapp.azure.com/products/${catid}` : 'https://ierg4210.eastasia.cloudapp.azure.com/products';
-                fetch(url)
-                    .then(response => {
-                        if (!response.ok) throw new Error('Products fetch failed');
-                        return response.json();
-                    })
-                    .then(products => {
-                        const productList = document.getElementById('product-list');
-                        productList.innerHTML = '';
-                        products.forEach(product => {
-                            const productDiv = document.createElement('div');
-                            productDiv.className = 'product';
-                            productDiv.innerHTML = DOMPurify.sanitize(`
+         </select>
+      </section>
+      <section class="product-list" id="product-list"></section>
+      <div id="shopping-cart" class="shopping-cart">
+         <button class="close-cart">×</button>
+         <h3>Shopping Cart</h3>
+         <ul class="cart-items"></ul>
+      </div>
+      <footer>
+         <p>© 2025 Dummy Shopping Website</p>
+      </footer>
+      <script src="/cart.js"></script>
+      <script>
+         document.addEventListener('DOMContentLoaded', () => {
+             fetch('https://ierg4210.eastasia.cloudapp.azure.com/csrf-token', { credentials: 'include' })
+                 .then(res => res.json())
+                 .then(data => {
+                     const logoutForm = document.getElementById('logout-form');
+                     logoutForm.insertAdjacentHTML('afterbegin', `<input type="hidden" name="csrfToken" value="${data.csrfToken}">`);
+                     
+                     logoutForm.addEventListener('submit', async (e) => {
+                         e.preventDefault();
+                         const button = logoutForm.querySelector('button[type="submit"]');
+                         button.disabled = true;
+                         
+                         try {
+                             const response = await fetch('https://ierg4210.eastasia.cloudapp.azure.com/logout', {
+                                 method: 'POST',
+                                 headers: {
+                                     'Content-Type': 'application/json',
+                                     'X-CSRF-Token': data.csrfToken
+                                 },
+                                 credentials: 'include'
+                             });
+                             
+                             if (!response.ok) throw new Error('Logout failed');
+                             
+                             const result = await response.json();
+                             if (result.csrfToken) {
+                                 document.querySelector('#logout-form input[name="csrfToken"]').value = result.csrfToken;
+                             }
+                             window.location.href = result.redirect || '/login';
+                         } catch (err) {
+                             console.error('Logout error:', err);
+                             fetch('https://ierg4210.eastasia.cloudapp.azure.com/csrf-token', { credentials: 'include' })
+                                 .then(res => res.json())
+                                 .then(data => {
+                                     document.querySelector('#logout-form input[name="csrfToken"]').value = data.csrfToken;
+                                     window.location.href = '/login';
+                                 });
+                         } finally {
+                             button.disabled = false;
+                         }
+                     });
+                 })
+                 .catch(err => console.error('CSRF fetch error:', err));
+         
+             fetch('https://ierg4210.eastasia.cloudapp.azure.com/user', { credentials: 'include' })
+                 .then(res => res.json())
+                 .then(data => {
+                     const userStatus = document.getElementById('user-status');
+                     const logoutLink = document.getElementById('logout-link');
+                     const adminLink = document.getElementById('admin-link');
+                     const ordersLink = document.getElementById('orders-link');
+                     
+                     if (data.email !== 'Guest') {
+                         userStatus.textContent = 'Logout';
+                         logoutLink.style.display = 'inline';
+                         userStatus.style.display = 'none';
+                         ordersLink.style.display = 'inline';
+                         
+                         if (data.isAdmin && adminLink) {
+                             adminLink.style.display = 'inline';
+                         } else if (adminLink) {
+                             adminLink.style.display = 'none';
+                         }
+                     } else {
+                         userStatus.textContent = 'Login';
+                         userStatus.style.display = 'inline';
+                         logoutLink.style.display = 'none';
+                         ordersLink.style.display = 'none';
+                         if (adminLink) {
+                             adminLink.style.display = 'none';
+                         }
+                         userStatus.onclick = () => window.location.href = '/login';
+                     }
+                 })
+                 .catch(err => console.error('User fetch error:', err));
+         
+             if (document.getElementById('category-select')) {
+                 fetch('https://ierg4210.eastasia.cloudapp.azure.com/categories')
+                     .then(response => {
+                         if (!response.ok) throw new Error('Categories fetch failed');
+                         return response.json();
+                     })
+                     .then(categories => {
+                         const categorySelect = document.getElementById('category-select');
+                         categories.forEach(category => {
+                             const option = document.createElement('option');
+                             option.value = category.catid;
+                             option.textContent = category.name;
+                             categorySelect.appendChild(option);
+                         });
+         
+                         const urlParams = new URLSearchParams(window.location.search);
+                         const catid = urlParams.get('catid');
+                         if (catid) {
+                             categorySelect.value = catid;
+                             loadProducts(catid);
+                             document.getElementById('breadcrumb-category').textContent = categorySelect.options[categorySelect.selectedIndex].text;
+                         } else {
+                             loadProducts();
+                         }
+                     })
+                     .catch(err => console.error('Categories error:', err));
+             }
+         
+             function loadProducts(catid = null) {
+                 const url = catid ? `https://ierg4210.eastasia.cloudapp.azure.com/products/${catid}` : 'https://ierg4210.eastasia.cloudapp.azure.com/products';
+                 fetch(url)
+                     .then(response => {
+                         if (!response.ok) throw new Error('Products fetch failed');
+                         return response.json();
+                     })
+                     .then(products => {
+                         const productList = document.getElementById('product-list');
+                         productList.innerHTML = '';
+                         products.forEach(product => {
+                             const productDiv = document.createElement('div');
+                             productDiv.className = 'product';
+                             productDiv.innerHTML = DOMPurify.sanitize(`
                                  <a href="/product?pid=${product.pid}">
                                      <img src="${product.thumbnail || '/images/product' + product.pid + '.jpg'}" alt="${product.name}" class="thumbnail">
                                      <h3>${product.name}</h3>
@@ -189,150 +170,26 @@
                                  <p>$${product.price}</p>
                                  <button class="add-to-cart" data-pid="${product.pid}" data-name="${product.name}" data-price="${product.price}">Add to Cart</button>
                              `);
-                            productList.appendChild(productDiv);
-                        });
-                    })
-                    .catch(err => console.error('Products error:', err));
-            }
-
-            document.getElementById('category-select').addEventListener('change', (e) => {
-                const catid = e.target.value;
-                if (catid) {
-                    history.pushState({}, '', `?catid=${catid}`);
-                    loadProducts(catid);
-                    document.getElementById('breadcrumb-category').textContent = e.target.options[e.target.selectedIndex].text;
-                } else {
-                    history.pushState({}, '', '/');
-                    loadProducts();
-                    document.getElementById('breadcrumb-category').textContent = 'All Categories';
-                }
-            });
-        });
-
-        // 初始化聊天功能
-        function initChat(csrfToken) {
-            const chatButton = document.getElementById('chat-button');
-            const chatWindow = document.getElementById('chat-window');
-            const chatClose = document.getElementById('chat-close');
-            const sendButton = document.getElementById('send-message');
-            const messageInput = document.getElementById('message-input');
-            const chatMessages = document.getElementById('chat-messages');
-            const chatError = document.getElementById('chat-error');
-
-            chatButton.addEventListener('click', () => {
-                chatWindow.classList.toggle('visible');
-                fetchMessages(); // 打开时刷新消息
-            });
-            chatClose.addEventListener('click', () => {
-                chatWindow.classList.remove('visible');
-            });
-
-            sendButton.addEventListener('click', async () => {
-                const content = messageInput.value.trim();
-                if (!content) {
-                    chatError.textContent = 'Message cannot be empty';
-                    return;
-                }
-                chatError.textContent = '';
-                sendButton.disabled = true;
-                try {
-                    const response = await fetch('https://ierg4210.eastasia.cloudapp.azure.com/send-message', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRF-Token': csrfToken
-                        },
-                        body: JSON.stringify({ content }),
-                        credentials: 'include'
-                    });
-                    const data = await response.json();
-                    if (data.success) {
-                        messageInput.value = '';
-                        fetchMessages();
-                    } else {
-                        chatError.textContent = 'Error sending message: ' + data.error;
-                    }
-                } catch (err) {
-                    console.error('Send message error:', err);
-                    chatError.textContent = 'Error sending message: Network error';
-                } finally {
-                    sendButton.disabled = false;
-                }
-            });
-
-            async function fetchMessages() {
-                try {
-                    const response = await fetch('https://ierg4210.eastasia.cloudapp.azure.com/messages', { credentials: 'include' });
-                    if (!response.ok) throw new Error('Messages fetch failed');
-                    const messages = await response.json();
-                    chatMessages.innerHTML = '';
-                    messages.forEach(msg => {
-                        const div = document.createElement('div');
-                        div.className = 'message';
-                        if (msg.content) {
-                            div.innerHTML = DOMPurify.sanitize(`
-                        <span>You: ${msg.content}</span>
-                        <small>${new Date(msg.created_at).toLocaleString()}</small>
-                    `);
-                            chatMessages.appendChild(div);
-                        }
-                        if (msg.admin_reply) {
-                            const adminDiv = document.createElement('div');
-                            adminDiv.className = 'message admin-message';
-                            adminDiv.innerHTML = DOMPurify.sanitize(`
-                        <span>Support: ${msg.admin_reply}</span>
-                        <small>${new Date(msg.replied_at).toLocaleString()}</small>
-                    `);
-                            chatMessages.appendChild(adminDiv);
-                        }
-                    });
-                    chatMessages.scrollTop = chatMessages.scrollHeight;
-                } catch (err) {
-                    console.error('Fetch messages error:', err);
-                    chatError.textContent = 'Error fetching messages';
-                }
-            }
-
-            setInterval(fetchMessages, 10000); // 改为 10 秒轮询
-            fetchMessages(); // 初始加载
-        }
-
-        // 用户状态和聊天框可见性
-        fetch('https://ierg4210.eastasia.cloudapp.azure.com/user', { credentials: 'include' })
-            .then(res => res.json())
-            .then(data => {
-                const userStatus = document.getElementById('user-status');
-                const logoutLink = document.getElementById('logout-link');
-                const adminLink = document.getElementById('admin-link');
-                const ordersLink = document.getElementById('orders-link');
-                const chatbox = document.getElementById('chatbox');
-
-                if (data.email !== 'Guest') {
-                    userStatus.textContent = 'Logout';
-                    logoutLink.style.display = 'inline';
-                    userStatus.style.display = 'none';
-                    ordersLink.style.display = 'inline';
-                    chatbox.style.display = 'block';
-                    if (data.isAdmin && adminLink) {
-                        adminLink.style.display = 'inline';
-                    }
-                } else {
-                    userStatus.textContent = 'Login';
-                    userStatus.style.display = 'inline';
-                    logoutLink.style.display = 'none';
-                    ordersLink.style.display = 'none';
-                    chatbox.style.display = 'none';
-                    if (adminLink) {
-                        adminLink.style.display = 'none';
-                    }
-                    userStatus.onclick = () => window.location.href = '/login';
-                }
-            })
-            .catch(err => console.error('User fetch error:', err));
-    </script>
-    <script>(function () { function c() { var b = a.contentDocument || a.contentWindow.document; if (b) { var d = b.createElement('script'); d.innerHTML = "window.__CF$cv$params={r:'9353ca292addb0e8',t:'MTc0NTQ3ODcxOC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);"; b.getElementsByTagName('head')[0].appendChild(d) } } if (document.body) { var a = document.createElement('iframe'); a.height = 1; a.width = 1; a.style.position = 'absolute'; a.style.top = 0; a.style.left = 0; a.style.border = 'none'; a.style.visibility = 'hidden'; document.body.appendChild(a); if ('loading' !== document.readyState) c(); else if (window.addEventListener) document.addEventListener('DOMContentLoaded', c); else { var e = document.onreadystatechange || function () { }; document.onreadystatechange = function (b) { e(b); 'loading' !== document.readyState && (document.onreadystatechange = e, c()) } } } })();</script>
-    <script>(function () { function c() { var b = a.contentDocument || a.contentWindow.document; if (b) { var d = b.createElement('script'); d.innerHTML = "window.__CF$cv$params={r:'935462d63ca2676e',t:'MTc0NTQ4NDk3Mi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);"; b.getElementsByTagName('head')[0].appendChild(d) } } if (document.body) { var a = document.createElement('iframe'); a.height = 1; a.width = 1; a.style.position = 'absolute'; a.style.top = 0; a.style.left = 0; a.style.border = 'none'; a.style.visibility = 'hidden'; document.body.appendChild(a); if ('loading' !== document.readyState) c(); else if (window.addEventListener) document.addEventListener('DOMContentLoaded', c); else { var e = document.onreadystatechange || function () { }; document.onreadystatechange = function (b) { e(b); 'loading' !== document.readyState && (document.onreadystatechange = e, c()) } } } })();</script>
-<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'93dfb0e1db0e456a',t:'MTc0Njk0NTY4OS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script>
-</body>
-
+                             productList.appendChild(productDiv);
+                         });
+                     })
+                     .catch(err => console.error('Products error:', err));
+             }
+         
+             document.getElementById('category-select').addEventListener('change', (e) => {
+                 const catid = e.target.value;
+                 if (catid) {
+                     history.pushState({}, '', `?catid=${catid}`);
+                     loadProducts(catid);
+                     document.getElementById('breadcrumb-category').textContent = e.target.options[e.target.selectedIndex].text;
+                 } else {
+                     history.pushState({}, '', '/');
+                     loadProducts();
+                     document.getElementById('breadcrumb-category').textContent = 'All Categories';
+                 }
+             });
+         });
+      </script>
+      <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9353ca292addb0e8',t:'MTc0NTQ3ODcxOC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script>
+   <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'935462d63ca2676e',t:'MTc0NTQ4NDk3Mi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
