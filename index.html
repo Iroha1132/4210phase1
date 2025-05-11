@@ -21,6 +21,7 @@
                 <li><a href="/orders" id="orders-link" style="display: none;">My Orders</a></li>
                 <li>
                     <form id="logout-form" method="POST" action="/logout">
+                        <input type="hidden" name="csrfToken" id="csrfToken">
                         <button type="submit" id="logout-link" style="display: none;">Logout</button>
                     </form>
                 </li>
@@ -66,6 +67,79 @@
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             let csrfToken;
+
+            // 获取 CSRF 令牌的函数
+            const fetchCsrfToken = async () => {
+                try {
+                    const response = await fetch('https://ierg4210.eastasia.cloudapp.azure.com/csrf-token', {
+                        credentials: 'include'
+                    });
+                    if (!response.ok) throw new Error('CSRF token fetch failed');
+                    const data = await response.json();
+                    return data.csrfToken;
+                } catch (err) {
+                    console.error('CSRF fetch error:', err);
+                    throw err;
+                }
+            };
+
+            // 初始化 CSRF 令牌并设置登出逻辑
+            fetchCsrfToken()
+                .then(csrfTokenValue => {
+                    csrfToken = csrfTokenValue;
+                    const logoutForm = document.getElementById('logout-form');
+                    document.getElementById('csrfToken').value = csrfToken;
+
+                    // 保留 initChat 调用（如果需要）
+                    initChat(csrfToken);
+
+                    logoutForm.addEventListener('submit', async (e) => {
+                        e.preventDefault();
+                        const button = logoutForm.querySelector('button[type="submit"]');
+                        button.disabled = true;
+
+                        try {
+                            // 在请求前重新获取 CSRF 令牌，确保同步
+                            const newCsrfToken = await fetchCsrfToken();
+                            document.getElementById('csrfToken').value = newCsrfToken;
+
+                            const response = await fetch('https://ierg4210.eastasia.cloudapp.azure.com/logout', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-CSRF-Token': newCsrfToken
+                                },
+                                credentials: 'include'
+                            });
+
+                            if (!response.ok) {
+                                const errorData = await response.json();
+                                throw new Error(errorData.error || 'Logout failed');
+                            }
+
+                            const result = await response.json();
+                            if (result.csrfToken) {
+                                document.getElementById('csrfToken').value = result.csrfToken;
+                                csrfToken = result.csrfToken;
+                            }
+
+                            window.location.href = result.redirect || '/login';
+                        } catch (err) {
+                            console.error('Logout error:', err);
+                            alert('Logout failed: ' + err.message);
+                            // 重新获取 CSRF 令牌并更新表单
+                            fetchCsrfToken()
+                                .then(newCsrfToken => {
+                                    document.getElementById('csrfToken').value = newCsrfToken;
+                                    csrfToken = newCsrfToken;
+                                    window.location.href = '/login';
+                                });
+                        } finally {
+                            button.disabled = false;
+                        }
+                    });
+                })
+                .catch(err => console.error('Initial CSRF fetch error:', err));
 
             fetch('https://ierg4210.eastasia.cloudapp.azure.com/csrf-token', { credentials: 'include' })
                 .then(res => {
