@@ -64,12 +64,18 @@
     <script src="/cart.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
+            let csrfToken;
+
             fetch('https://ierg4210.eastasia.cloudapp.azure.com/csrf-token', { credentials: 'include' })
-                .then(res => res.json())
+                .then(res => {
+                    if (!res.ok) throw new Error('CSRF token fetch failed');
+                    return res.json();
+                })
                 .then(data => {
+                    csrfToken = data.csrfToken;
                     const logoutForm = document.getElementById('logout-form');
-                    logoutForm.insertAdjacentHTML('afterbegin', `<input type="hidden" name="csrfToken" value="${data.csrfToken}">`);
-                    initChat(data.csrfToken);
+                    logoutForm.insertAdjacentHTML('afterbegin', `<input type="hidden" name="csrfToken" value="${csrfToken}">`);
+                    initChat(csrfToken);
 
                     logoutForm.addEventListener('submit', async (e) => {
                         e.preventDefault();
@@ -81,24 +87,32 @@
                                 method: 'POST',
                                 headers: {
                                     'Content-Type': 'application/json',
-                                    'X-CSRF-Token': data.csrfToken
+                                    'X-CSRF-Token': csrfToken
                                 },
+                                body: JSON.stringify({ csrfToken }), // 同时发送在 body 中
                                 credentials: 'include'
                             });
 
-                            if (!response.ok) throw new Error('Logout failed');
+                            if (!response.ok) {
+                                const errorData = await response.json();
+                                throw new Error(errorData.error || 'Logout failed');
+                            }
 
                             const result = await response.json();
                             if (result.csrfToken) {
-                                document.querySelector('#logout-form input[name="csrfToken"]').value = result.csrfToken;
+                                csrfToken = result.csrfToken; // 更新本地变量
+                                logoutForm.querySelector('input[name="csrfToken"]').value = result.csrfToken; // 更新表单
                             }
                             window.location.href = result.redirect || '/login';
                         } catch (err) {
                             console.error('Logout error:', err);
+                            alert('Logout failed: ' + err.message);
+                            // 刷新 CSRF token
                             fetch('https://ierg4210.eastasia.cloudapp.azure.com/csrf-token', { credentials: 'include' })
                                 .then(res => res.json())
                                 .then(data => {
-                                    document.querySelector('#logout-form input[name="csrfToken"]').value = data.csrfToken;
+                                    csrfToken = data.csrfToken;
+                                    logoutForm.querySelector('input[name="csrfToken"]').value = data.csrfToken;
                                     window.location.href = '/login';
                                 });
                         } finally {
