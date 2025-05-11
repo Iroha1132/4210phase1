@@ -119,7 +119,7 @@ document.addEventListener('click', (event) => {
             quantity: item.quantity
         }));
 
-        // 先获取 CSRF token
+        // 获取 CSRF token
         fetch('https://ierg4210.eastasia.cloudapp.azure.com/csrf-token', { credentials: 'include' })
             .then(response => {
                 if (!response.ok) throw new Error('CSRF token fetch failed');
@@ -138,7 +138,10 @@ document.addEventListener('click', (event) => {
                 });
             })
             .then(response => {
-                if (!response.ok) throw new Error('Order validation failed: ' + response.statusText);
+                if (!response.ok) {
+                    console.error('Validate-order failed:', response.status, response.statusText);
+                    throw new Error('Order validation failed: ' + response.statusText);
+                }
                 return response.json();
             })
             .then(data => {
@@ -159,6 +162,7 @@ document.addEventListener('click', (event) => {
                     return;
                 }
 
+                // 提交表单
                 form.submit();
                 localStorage.removeItem('cart');
                 updateCartUI();
