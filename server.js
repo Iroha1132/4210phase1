@@ -67,9 +67,9 @@ app.use((req, res, next) => {
 
 const validateCsrfToken = (req, res, next) => {
     const csrfToken = req.cookies.csrfToken;
-    const bodyToken = req.body.csrfToken || req.headers['x-csrf-token'] || req.cookies.csrfToken;
+    const bodyToken = req.body.csrfToken || req.headers['x-csrf-token'];
     if (!csrfToken || !bodyToken || csrfToken !== bodyToken) {
-        return res.status(403).send('CSRF token validation failed');
+        return res.status(403).json({ error: 'CSRF token validation failed' });
     }
     next();
 };
