@@ -292,7 +292,39 @@
                 }
             }
 
-            //setInterval(fetchMessages, 10000);
+            let isChatActive = false; // 跟踪聊天窗口状态
+
+            function startChatPolling() {
+                if (isChatActive) {
+                    fetchMessages();
+                    setTimeout(startChatPolling, 30000); // 30 秒轮询
+                }
+            }
+
+            function fetchMessages() {
+                fetch('https://ierg4210.eastasia.cloudapp.azure.com/messages', {
+                    credentials: 'include',
+                    headers: { 'X-CSRF-Token': csrfToken }
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        console.log('Messages fetched:', data);
+                        // 更新聊天 UI
+                    })
+                    .catch(err => console.error('Fetch messages error:', err));
+            }
+
+            // 示例：当用户打开聊天窗口时启动轮询
+            document.getElementById('open-chat').addEventListener('click', () => {
+                isChatActive = true;
+                startChatPolling();
+            });
+
+            // 示例：当用户关闭聊天窗口时停止轮询
+            document.getElementById('close-chat').addEventListener('click', () => {
+                isChatActive = false;
+            });
+
             fetchMessages(); // 初始加载
         }
     </script>
