@@ -44,7 +44,7 @@ db.getConnection((err, connection) => {
 
 // Middleware
 app.use(cors({
-    origin: 'https://ierg4210.eastasia.cloudapp.azure.com',
+    origin: ['https://ierg4210.eastasia.cloudapp.azure.com', 'https://s37.ierg4210.ie.cuhk.edu.hk'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token']
@@ -115,6 +115,7 @@ const escapeHtml = (text) => sanitizeHtml(text, { allowedTags: [], allowedAttrib
 
 // Routes for HTML pages
 app.get('/', (req, res) => {
+    res.setHeader('Content-Type', 'text/html');
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
@@ -136,6 +137,7 @@ app.get('/public/admin.html', (req, res) => {
 
 // API Routes
 app.get('/csrf-token', (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
     res.json({ csrfToken: req.cookies.csrfToken });
 });
 
@@ -147,9 +149,11 @@ app.get('/user', async (req, res) => {
         const [results] = await db.query('SELECT email, is_admin FROM users WHERE auth_token = ?', [authToken]);
         if (!results.length) return res.json({ email: 'Guest', isAdmin: false });
         
+        res.setHeader('Content-Type', 'application/json');
         res.json({ email: results[0].email, isAdmin: results[0].is_admin });
     } catch (err) {
         console.error('User fetch error:', err);
+        res.setHeader('Content-Type', 'application/json');
         res.status(500).send('Internal Server Error');
     }
 });
@@ -433,10 +437,12 @@ app.post('/validate-order', validateCsrfToken, authenticate, async (req, res) =>
             console.log('Order inserted, ID:', result.insertId);
 
             connection.release();
+            res.setHeader('Content-Type', 'application/json');
             res.json({ orderID: result.insertId, digest });
         } catch (err) {
             connection.release();
             console.error('Order validation error:', err);
+            res.setHeader('Content-Type', 'application/json');
             res.status(400).json({ error: err.message });
         }
     } catch (err) {
@@ -448,6 +454,7 @@ app.post('/validate-order', validateCsrfToken, authenticate, async (req, res) =>
 app.post('/paypal-webhook', async (req, res) => {
     try {
         console.log('PayPal webhook received:', req.body);
+        res.setHeader('Content-Type', 'text/plain');
 
         // Verify PayPal IPN
         const verificationUrl = 'https://www.sandbox.paypal.com/cgi-bin/webscr?cmd=_notify-validate';
@@ -523,6 +530,7 @@ app.post('/paypal-webhook', async (req, res) => {
         res.status(200).send('OK');
     } catch (err) {
         console.error('Webhook error:', err);
+        res.setHeader('Content-Type', 'text/plain');
         res.status(500).send('Internal Server Error');
     }
 });
