@@ -62,8 +62,6 @@ app.use((req, res, next) => {
         const token = generateCsrfToken();
         res.cookie('csrfToken', token, { httpOnly: true, secure: true, sameSite: 'strict' });
     }
-    res.setHeader('Content-Security-Policy', 
-        "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline' https://ierg4210.eastasia.cloudapp.azure.com https://cdnjs.cloudflare.com 'sha256-eS4iiTwilkHHuH/RsKUxZJ/trccia6L6VGiErRQlO68=' 'sha256-VePhyI/FRH7rfe7IewIWJik32vGwfZfE2wUH8QXeulE='; style-src 'self' 'unsafe-inline'; connect-src 'self' https://ierg4210.eastasia.cloudapp.azure.com; img-src 'self' data:; font-src 'self';");
     next();
 });
 
