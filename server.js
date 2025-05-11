@@ -12,6 +12,10 @@ const sanitizeHtml = require('sanitize-html');
 const http = require('http');
 const fetch = require('node-fetch');
 const dotenv = require('dotenv');
+const session = require('express-session');
+const RedisStore = require('connect-redis')(session);
+const redis = require('redis');
+
 dotenv.config();
 
 const fs = require('fs');
@@ -42,6 +46,21 @@ db.getConnection((err, connection) => {
     connection.release();
 });
 
+// Session Management
+const redisClient = redis.createClient();
+app.use(session({
+    store: new RedisStore({ client: redisClient }),
+    secret: process.env.SESSION_SECRET || 'your-secret',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        secure: true,
+        httpOnly: true,
+        sameSite: 'strict',
+        maxAge: 2 * 24 * 60 * 60 * 1000
+    }
+}));
+
 // Middleware
 app.use(cors({
     origin: 'https://ierg4210.eastasia.cloudapp.azure.com',
@@ -67,9 +86,12 @@ app.use((req, res, next) => {
 
 const validateCsrfToken = (req, res, next) => {
     const submittedToken = req.headers['x-csrf-token'] || req.body.csrfToken;
+    console.log('Submitted CSRF token:', submittedToken);
+    console.log('Stored CSRF tokens:', req.session.csrfTokens);
     if (req.session.csrfTokens && req.session.csrfTokens.includes(submittedToken)) {
         next();
     } else {
+        console.error('CSRF validation failed:', submittedToken);
         res.status(403).json({ error: 'Invalid CSRF token' });
     }
 };
@@ -136,9 +158,10 @@ app.get('/public/admin.html', (req, res) => {
 
 // API Routes
 app.get('/csrf-token', (req, res) => {
-    const csrfToken = require('crypto').randomBytes(32).toString('hex');
+    const csrfToken = crypto.randomBytes(32).toString('hex');
     req.session.csrfTokens = req.session.csrfTokens || [];
-    req.session.csrfTokens.push(csrfToken); // 存储所有 token
+    req.session.csrfTokens.push(csrfToken);
+    console.log('Generated CSRF token:', csrfToken);
     res.json({ csrfToken });
 });
 
@@ -440,7 +463,7 @@ app.post('/validate-order', validateCsrfToken, authenticate, async (req, res) =>
         } catch (err) {
             connection.release();
             console.error('Order validation error:', err);
-            res.status(400).json({ error: err.message });
+            res.status(400).json({ error: `Order validation failed: ${err.message}` });
         }
     } catch (err) {
         console.error('Connection error:', err);
