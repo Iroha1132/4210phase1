@@ -341,7 +341,8 @@ app.post('/logout', validateCsrfToken, authenticate, async (req, res) => {
             httpOnly: true, 
             secure: true, 
             sameSite: 'strict',
-            path: '/' // 确保 cookie 路径正确
+            path: '/',
+            maxAge: 24 * 60 * 60 * 1000 // 24 小时有效期
         });
         
         res.json({ 
