@@ -135,6 +135,25 @@
             })
             .catch(err => console.error('CSRF fetch error:', err));
 
+        function loadCategories() {
+            fetch('https://ierg4210.eastasia.cloudapp.azure.com/categories')
+                .then(response => {
+                    if (!response.ok) throw new Error('Categories fetch failed');
+                    return response.json();
+                })
+                .then(categories => {
+                    const categorySelect = document.getElementById('category');
+                    categorySelect.innerHTML = '<option value="">-- Select a Category --</option>';
+                    categories.forEach(category => {
+                        const option = document.createElement('option');
+                        option.value = category.catid;
+                        option.textContent = category.name;
+                        categorySelect.appendChild(option);
+                    });
+                })
+                .catch(err => console.error('Categories error:', err));
+        }
+
         function loadProducts() {
             fetch('https://ierg4210.eastasia.cloudapp.azure.com/products')
                 .then(response => {
