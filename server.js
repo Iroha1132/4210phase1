@@ -340,7 +340,8 @@ app.post('/logout', validateCsrfToken, authenticate, async (req, res) => {
         res.cookie('csrfToken', newCsrfToken, { 
             httpOnly: true, 
             secure: true, 
-            sameSite: 'strict' 
+            sameSite: 'strict',
+            path: '/' // 确保 cookie 路径正确
         });
         
         res.json({ 
