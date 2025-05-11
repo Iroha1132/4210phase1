@@ -75,7 +75,7 @@
                     csrfToken = data.csrfToken;
                     const logoutForm = document.getElementById('logout-form');
                     logoutForm.insertAdjacentHTML('afterbegin', `<input type="hidden" name="csrfToken" value="${csrfToken}">`);
-                    initChat(csrfToken);
+                    //initChat(csrfToken);
 
                     logoutForm.addEventListener('submit', async (e) => {
                         e.preventDefault();
@@ -317,7 +317,7 @@
 
             function startChatPolling() {
                 if (isChatActive) {
-                    fetchMessages();
+                    //fetchMessages();
                     //setTimeout(startChatPolling, 30000); // 30 秒轮询
                 }
             }
