@@ -67,6 +67,8 @@ function updateCartUI() {
             <input type="hidden" name="amount_${itemIndex}" value="${item.price}">
             <input type="hidden" name="quantity_${itemIndex}" value="${item.quantity}">
             <input type="hidden" name="cancel_return" value="https://ierg4210.eastasia.cloudapp.azure.com/?payment=cancel">
+            <input type="hidden" name="no_note" value="1"> <!-- 禁用备注 -->
+            <input type="hidden" name="no_shipping" value="1"> <!-- 禁用配送 -->
         `;
         cartItems.appendChild(cartItem);
     });
