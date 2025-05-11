@@ -65,12 +65,16 @@
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             fetch('https://ierg4210.eastasia.cloudapp.azure.com/csrf-token', { credentials: 'include' })
-                .then(res => res.json())
+                .then(res => {
+                    if (!res.ok) throw new Error('CSRF fetch failed');
+                    return res.json();
+                })
                 .then(data => {
-                    const logoutForm = document.getElementById('logout-form');
-                    logoutForm.insertAdjacentHTML('afterbegin', `<input type="hidden" name="csrfToken" value="${data.csrfToken}">`);
-                    initChat(data.csrfToken);
+                    csrfToken = data.csrfToken;
+                    document.getElementById('logout-form').insertAdjacentHTML('afterbegin', `<input type="hidden" name="csrfToken" value="${csrfToken}">`);
+                    initChat(csrfToken);
 
+                    const logoutForm = document.getElementById('logout-form');
                     logoutForm.addEventListener('submit', async (e) => {
                         e.preventDefault();
                         const button = logoutForm.querySelector('button[type="submit"]');
