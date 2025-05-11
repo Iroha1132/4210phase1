@@ -44,7 +44,7 @@ db.getConnection((err, connection) => {
 
 // Middleware
 app.use(cors({
-    origin: ['https://www.paypal.com', 'https://ierg4210.eastasia.cloudapp.azure.com', 'https://s37.ierg4210.ie.cuhk.edu.hk'],
+    origin: ['https://ierg4210.eastasia.cloudapp.azure.com', 'https://s37.ierg4210.ie.cuhk.edu.hk'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token']
@@ -115,6 +115,7 @@ const escapeHtml = (text) => sanitizeHtml(text, { allowedTags: [], allowedAttrib
 
 // Routes for HTML pages
 app.get('/', (req, res) => {
+    res.setHeader('Content-Type', 'text/html');
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
@@ -448,6 +449,7 @@ app.post('/validate-order', validateCsrfToken, authenticate, async (req, res) =>
 app.post('/paypal-webhook', async (req, res) => {
     try {
         console.log('PayPal webhook received:', req.body);
+        res.setHeader('Content-Type', 'text/plain');
 
         // Verify PayPal IPN
         const verificationUrl = 'https://www.sandbox.paypal.com/cgi-bin/webscr?cmd=_notify-validate';
@@ -523,6 +525,7 @@ app.post('/paypal-webhook', async (req, res) => {
         res.status(200).send('OK');
     } catch (err) {
         console.error('Webhook error:', err);
+        res.setHeader('Content-Type', 'text/plain');
         res.status(500).send('Internal Server Error');
     }
 });
