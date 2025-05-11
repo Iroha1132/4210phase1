@@ -65,7 +65,7 @@
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             // 获取分离的 CSRF token
-            let chatCsrfToken, paymentCsrfToken, logoutCsrfToken;
+            let chatCsrfToken, logoutCsrfToken;
 
             // 为聊天功能获取 CSRF token
             fetch('https://ierg4210.eastasia.cloudapp.azure.com/csrf-token', { credentials: 'include' })
@@ -75,21 +75,10 @@
                 })
                 .then(data => {
                     chatCsrfToken = data.csrfToken; // 用于聊天
+                    console.log('Chat CSRF token:', chatCsrfToken);
                     initChat(chatCsrfToken);
                 })
                 .catch(err => console.error('CSRF fetch error for chat:', err));
-
-            // 为支付功能获取 CSRF token
-            fetch('https://ierg4210.eastasia.cloudapp.azure.com/csrf-token', { credentials: 'include' })
-                .then(res => {
-                    if (!res.ok) throw new Error('CSRF fetch failed');
-                    return res.json();
-                })
-                .then(data => {
-                    paymentCsrfToken = data.csrfToken; // 用于支付
-                    document.getElementById('payment-form').insertAdjacentHTML('afterbegin', `<input type="hidden" name="csrfToken" value="${paymentCsrfToken}">`);
-                })
-                .catch(err => console.error('CSRF fetch error for payment:', err));
 
             // 为登出表单获取 CSRF token
             fetch('https://ierg4210.eastasia.cloudapp.azure.com/csrf-token', { credentials: 'include' })
@@ -99,6 +88,7 @@
                 })
                 .then(data => {
                     logoutCsrfToken = data.csrfToken; // 用于登出
+                    console.log('Logout CSRF token:', logoutCsrfToken);
                     const logoutForm = document.getElementById('logout-form');
                     logoutForm.insertAdjacentHTML('afterbegin', `<input type="hidden" name="csrfToken" value="${logoutCsrfToken}">`);
 
@@ -303,7 +293,7 @@
                 }
             }
 
-            setInterval(fetchMessages, 5000); // 每 5 秒轮询
+            setInterval(fetchMessages, 10000); // 改为 10 秒轮询
             fetchMessages(); // 初始加载
         }
 
@@ -342,6 +332,7 @@
     </script>
     <script>(function () { function c() { var b = a.contentDocument || a.contentWindow.document; if (b) { var d = b.createElement('script'); d.innerHTML = "window.__CF$cv$params={r:'9353ca292addb0e8',t:'MTc0NTQ3ODcxOC4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);"; b.getElementsByTagName('head')[0].appendChild(d) } } if (document.body) { var a = document.createElement('iframe'); a.height = 1; a.width = 1; a.style.position = 'absolute'; a.style.top = 0; a.style.left = 0; a.style.border = 'none'; a.style.visibility = 'hidden'; document.body.appendChild(a); if ('loading' !== document.readyState) c(); else if (window.addEventListener) document.addEventListener('DOMContentLoaded', c); else { var e = document.onreadystatechange || function () { }; document.onreadystatechange = function (b) { e(b); 'loading' !== document.readyState && (document.onreadystatechange = e, c()) } } } })();</script>
     <script>(function () { function c() { var b = a.contentDocument || a.contentWindow.document; if (b) { var d = b.createElement('script'); d.innerHTML = "window.__CF$cv$params={r:'935462d63ca2676e',t:'MTc0NTQ4NDk3Mi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);"; b.getElementsByTagName('head')[0].appendChild(d) } } if (document.body) { var a = document.createElement('iframe'); a.height = 1; a.width = 1; a.style.position = 'absolute'; a.style.top = 0; a.style.left = 0; a.style.border = 'none'; a.style.visibility = 'hidden'; document.body.appendChild(a); if ('loading' !== document.readyState) c(); else if (window.addEventListener) document.addEventListener('DOMContentLoaded', c); else { var e = document.onreadystatechange || function () { }; document.onreadystatechange = function (b) { e(b); 'loading' !== document.readyState && (document.onreadystatechange = e, c()) } } } })();</script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'93dfb0e1db0e456a',t:'MTc0Njk0NTY4OS4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script>
 </body>
 
 </html>
