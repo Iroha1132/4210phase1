@@ -89,7 +89,7 @@
                                     'Content-Type': 'application/json',
                                     'X-CSRF-Token': csrfToken
                                 },
-                                body: JSON.stringify({ csrfToken }), // 同时发送在 body 中
+                                body: JSON.stringify({ csrfToken }),
                                 credentials: 'include'
                             });
 
@@ -100,14 +100,17 @@
 
                             const result = await response.json();
                             if (result.csrfToken) {
-                                csrfToken = result.csrfToken; // 更新本地变量
-                                logoutForm.querySelector('input[name="csrfToken"]').value = result.csrfToken; // 更新表单
+                                csrfToken = result.csrfToken;
+                                logoutForm.querySelector('input[name="csrfToken"]').value = result.csrfToken;
                             }
-                            window.location.href = result.redirect || '/login';
+
+                            // 延迟重定向，确保 cookie 更新
+                            setTimeout(() => {
+                                window.location.href = result.redirect || '/login';
+                            }, 500);
                         } catch (err) {
                             console.error('Logout error:', err);
                             alert('Logout failed: ' + err.message);
-                            // 刷新 CSRF token
                             fetch('https://ierg4210.eastasia.cloudapp.azure.com/csrf-token', { credentials: 'include' })
                                 .then(res => res.json())
                                 .then(data => {
