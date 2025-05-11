@@ -66,6 +66,7 @@ function updateCartUI() {
             <input type="hidden" name="item_number_${itemIndex}" value="${item.pid}">
             <input type="hidden" name="amount_${itemIndex}" value="${item.price}">
             <input type="hidden" name="quantity_${itemIndex}" value="${item.quantity}">
+            <input type="hidden" name="cancel_return" value="https://ierg4210.eastasia.cloudapp.azure.com/?payment=cancel">
         `;
         cartItems.appendChild(cartItem);
     });
@@ -170,11 +171,13 @@ document.addEventListener('click', (event) => {
 });
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Check for payment success query parameter
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('payment') === 'success') {
         alert('Payment successful! Thank you for your purchase.');
-        history.replaceState({}, '', '/'); // Clear query parameter
+        history.replaceState({}, '', '/');
+    } else if (urlParams.get('payment') === 'cancel') {
+        alert('Payment was cancelled.');
+        history.replaceState({}, '', '/');
     }
 });
 
