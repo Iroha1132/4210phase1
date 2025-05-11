@@ -44,7 +44,7 @@ db.getConnection((err, connection) => {
 
 // Middleware
 app.use(cors({
-    origin: ['https://ierg4210.eastasia.cloudapp.azure.com', 'https://s37.ierg4210.ie.cuhk.edu.hk'],
+    origin: ['https://www.paypal.com', 'https://ierg4210.eastasia.cloudapp.azure.com', 'https://s37.ierg4210.ie.cuhk.edu.hk'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token']
@@ -69,7 +69,7 @@ const validateCsrfToken = (req, res, next) => {
     const csrfToken = req.cookies.csrfToken;
     const bodyToken = req.body.csrfToken || req.headers['x-csrf-token'] || req.cookies.csrfToken;
     if (!csrfToken || !bodyToken || csrfToken !== bodyToken) {
-        return res.status(403).json({ error: 'CSRF token validation failed' });
+        return res.status(403).send('CSRF token validation failed');
     }
     next();
 };
@@ -115,7 +115,6 @@ const escapeHtml = (text) => sanitizeHtml(text, { allowedTags: [], allowedAttrib
 
 // Routes for HTML pages
 app.get('/', (req, res) => {
-    res.setHeader('Content-Type', 'text/html');
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
@@ -137,7 +136,6 @@ app.get('/public/admin.html', (req, res) => {
 
 // API Routes
 app.get('/csrf-token', (req, res) => {
-    res.setHeader('Content-Type', 'application/json');
     res.json({ csrfToken: req.cookies.csrfToken });
 });
 
@@ -340,9 +338,7 @@ app.post('/logout', validateCsrfToken, authenticate, async (req, res) => {
         res.cookie('csrfToken', newCsrfToken, { 
             httpOnly: true, 
             secure: true, 
-            sameSite: 'strict',
-            path: '/',
-            maxAge: 24 * 60 * 60 * 1000 // 24 小时有效期
+            sameSite: 'strict' 
         });
         
         res.json({ 
@@ -437,12 +433,10 @@ app.post('/validate-order', validateCsrfToken, authenticate, async (req, res) =>
             console.log('Order inserted, ID:', result.insertId);
 
             connection.release();
-            res.setHeader('Content-Type', 'application/json');
             res.json({ orderID: result.insertId, digest });
         } catch (err) {
             connection.release();
             console.error('Order validation error:', err);
-            res.setHeader('Content-Type', 'application/json');
             res.status(400).json({ error: err.message });
         }
     } catch (err) {
@@ -454,7 +448,6 @@ app.post('/validate-order', validateCsrfToken, authenticate, async (req, res) =>
 app.post('/paypal-webhook', async (req, res) => {
     try {
         console.log('PayPal webhook received:', req.body);
-        res.setHeader('Content-Type', 'text/plain');
 
         // Verify PayPal IPN
         const verificationUrl = 'https://www.sandbox.paypal.com/cgi-bin/webscr?cmd=_notify-validate';
@@ -530,7 +523,6 @@ app.post('/paypal-webhook', async (req, res) => {
         res.status(200).send('OK');
     } catch (err) {
         console.error('Webhook error:', err);
-        res.setHeader('Content-Type', 'text/plain');
         res.status(500).send('Internal Server Error');
     }
 });
@@ -581,70 +573,6 @@ app.post('/add-product', validateCsrfToken, authenticate, isAdmin, upload.single
             res.send('Product added');
         });
     }
-});
-
-app.put('/update-product/:pid', validateCsrfToken, authenticate, isAdmin, upload.single('image'), async (req, res) => {
-    const { catid, name, price, description } = req.body;
-    const pid = req.params.pid;
-    const imagePath = req.file ? `/uploads/${req.file.filename}` : null;
-
-    const nameError = validateTextInput(name, 255, 'Product name');
-    const descError = validateTextInput(description, 1000, 'Description');
-    const priceError = validatePrice(price);
-    if (nameError || descError || priceError || !catid) {
-        return res.status(400).send(nameError || descError || priceError || 'Category ID is required');
-    }
-
-    const sanitizedName = sanitizeHtml(name);
-    const sanitizedDesc = sanitizeHtml(description);
-
-    if (imagePath) {
-        if (!['image/jpeg', 'image/png', 'image/gif'].includes(req.file.mimetype)) {
-            return res.status(400).send('Invalid image type. Only JPEG, PNG, or GIF allowed.');
-        }
-
-        sharp(req.file.path)
-            .resize(200, 200)
-            .toFile(`uploads/thumbnail-${req.file.filename}`, (err) => {
-                if (err) {
-                    console.error('Image resize error:', err);
-                    return res.status(500).send('Internal Server Error');
-                }
-                const thumbnailPath = `/uploads/thumbnail-${req.file.filename}`;
-                const sql = 'UPDATE products SET catid=?, name=?, price=?, description=?, image=?, thumbnail=? WHERE pid=?';
-                db.query(sql, [catid, sanitizedName, price, sanitizedDesc, imagePath, thumbnailPath, pid], (err) => {
-                    if (err) {
-                        console.error('Update product error:', err);
-                        return res.status(500).send('Internal Server Error');
-                    }
-                    res.send('Product updated');
-                });
-            });
-    } else {
-        const sql = 'UPDATE products SET catid=?, name=?, price=?, description=? WHERE pid=?';
-        db.query(sql, [catid, sanitizedName, price, sanitizedDesc, pid], (err) => {
-            if (err) {
-                console.error('Update product error:', err);
-                return res.status(500).send('Internal Server Error');
-            }
-            res.send('Product updated');
-        });
-    }
-});
-
-app.post('/add-category', validateCsrfToken, authenticate, isAdmin, async (req, res) => {
-    const { name } = req.body;
-    const nameError = validateTextInput(name, 255, 'Category name');
-    if (nameError) return res.status(400).send(nameError);
-
-    const sanitizedName = sanitizeHtml(name);
-    db.query('INSERT INTO categories (name) VALUES (?)', [sanitizedName], (err) => {
-        if (err) {
-            console.error('Add category error:', err);
-            return res.status(500).send('Internal Server Error');
-        }
-        res.send('Category added');
-    });
 });
 
 // 发送消息
@@ -731,6 +659,70 @@ app.post('/reply-message', validateCsrfToken, authenticate, isAdmin, async (req,
         console.error('Reply message error:', err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
+});
+
+app.put('/update-product/:pid', validateCsrfToken, authenticate, isAdmin, upload.single('image'), async (req, res) => {
+    const { catid, name, price, description } = req.body;
+    const pid = req.params.pid;
+    const imagePath = req.file ? `/uploads/${req.file.filename}` : null;
+
+    const nameError = validateTextInput(name, 255, 'Product name');
+    const descError = validateTextInput(description, 1000, 'Description');
+    const priceError = validatePrice(price);
+    if (nameError || descError || priceError || !catid) {
+        return res.status(400).send(nameError || descError || priceError || 'Category ID is required');
+    }
+
+    const sanitizedName = sanitizeHtml(name);
+    const sanitizedDesc = sanitizeHtml(description);
+
+    if (imagePath) {
+        if (!['image/jpeg', 'image/png', 'image/gif'].includes(req.file.mimetype)) {
+            return res.status(400).send('Invalid image type. Only JPEG, PNG, or GIF allowed.');
+        }
+
+        sharp(req.file.path)
+            .resize(200, 200)
+            .toFile(`uploads/thumbnail-${req.file.filename}`, (err) => {
+                if (err) {
+                    console.error('Image resize error:', err);
+                    return res.status(500).send('Internal Server Error');
+                }
+                const thumbnailPath = `/uploads/thumbnail-${req.file.filename}`;
+                const sql = 'UPDATE products SET catid=?, name=?, price=?, description=?, image=?, thumbnail=? WHERE pid=?';
+                db.query(sql, [catid, sanitizedName, price, sanitizedDesc, imagePath, thumbnailPath, pid], (err) => {
+                    if (err) {
+                        console.error('Update product error:', err);
+                        return res.status(500).send('Internal Server Error');
+                    }
+                    res.send('Product updated');
+                });
+            });
+    } else {
+        const sql = 'UPDATE products SET catid=?, name=?, price=?, description=? WHERE pid=?';
+        db.query(sql, [catid, sanitizedName, price, sanitizedDesc, pid], (err) => {
+            if (err) {
+                console.error('Update product error:', err);
+                return res.status(500).send('Internal Server Error');
+            }
+            res.send('Product updated');
+        });
+    }
+});
+
+app.post('/add-category', validateCsrfToken, authenticate, isAdmin, async (req, res) => {
+    const { name } = req.body;
+    const nameError = validateTextInput(name, 255, 'Category name');
+    if (nameError) return res.status(400).send(nameError);
+
+    const sanitizedName = sanitizeHtml(name);
+    db.query('INSERT INTO categories (name) VALUES (?)', [sanitizedName], (err) => {
+        if (err) {
+            console.error('Add category error:', err);
+            return res.status(500).send('Internal Server Error');
+        }
+        res.send('Category added');
+    });
 });
 
 app.put('/update-category/:catid', validateCsrfToken, authenticate, isAdmin, async (req, res) => {
