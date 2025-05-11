@@ -113,27 +113,31 @@ document.addEventListener('click', (event) => {
             return;
         }
 
-        // Validate quantities
         const items = cart.map(item => ({
             pid: parseInt(item.pid),
             quantity: item.quantity
         }));
 
-        for (const item of items) {
-            if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
-                alert('Invalid quantity for product ID ' + item.pid);
-                return;
-            }
-        }
-
-        fetch('https://ierg4210.eastasia.cloudapp.azure.com/validate-order', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ items }),
-            credentials: 'include'
-        })
+        // 先获取 CSRF token
+        fetch('https://ierg4210.eastasia.cloudapp.azure.com/csrf-token', { credentials: 'include' })
             .then(response => {
-                if (!response.ok) throw new Error('Order validation failed');
+                if (!response.ok) throw new Error('CSRF token fetch failed');
+                return response.json();
+            })
+            .then(csrfData => {
+                // 调用 /validate-order
+                return fetch('https://ierg4210.eastasia.cloudapp.azure.com/validate-order', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': csrfData.csrfToken
+                    },
+                    body: JSON.stringify({ items }),
+                    credentials: 'include'
+                });
+            })
+            .then(response => {
+                if (!response.ok) throw new Error('Order validation failed: ' + response.statusText);
                 return response.json();
             })
             .then(data => {
@@ -141,25 +145,20 @@ document.addEventListener('click', (event) => {
                 document.getElementById('invoice').value = data.orderID;
                 document.getElementById('custom').value = data.digest;
 
-                // Log form data before submission
                 const formData = new FormData(form);
                 const formDataObject = {};
                 for (let [key, value] of formData.entries()) {
                     formDataObject[key] = value;
                 }
-                console.log('PayPal form data (before submission):', formDataObject);
+                console.log('PayPal form data:', formDataObject);
 
-                // Validate that cart items are present
                 if (!formDataObject['item_name_1']) {
                     console.error('No cart items found in form data');
-                    alert('Error: Cart items are missing. Please try adding items again.');
+                    alert('Error: Cart items are missing.');
                     return;
                 }
 
-                // Submit the form before clearing the cart
                 form.submit();
-
-                // Clear cart and update UI after submission
                 localStorage.removeItem('cart');
                 updateCartUI();
             })
