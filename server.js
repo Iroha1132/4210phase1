@@ -137,6 +137,7 @@ app.get('/public/admin.html', (req, res) => {
 
 // API Routes
 app.get('/csrf-token', (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
     res.json({ csrfToken: req.cookies.csrfToken });
 });
 
@@ -434,10 +435,12 @@ app.post('/validate-order', validateCsrfToken, authenticate, async (req, res) =>
             console.log('Order inserted, ID:', result.insertId);
 
             connection.release();
+            res.setHeader('Content-Type', 'application/json');
             res.json({ orderID: result.insertId, digest });
         } catch (err) {
             connection.release();
             console.error('Order validation error:', err);
+            res.setHeader('Content-Type', 'application/json');
             res.status(400).json({ error: err.message });
         }
     } catch (err) {
