@@ -68,7 +68,6 @@ app.use((req, res, next) => {
 const validateCsrfToken = (req, res, next) => {
     const csrfToken = req.cookies.csrfToken;
     const bodyToken = req.body.csrfToken || req.headers['x-csrf-token'] || req.cookies.csrfToken;
-    console.log('CSRF Validation:', { csrfToken, bodyToken });
     if (!csrfToken || !bodyToken || csrfToken !== bodyToken) {
         return res.status(403).json({ error: 'CSRF token validation failed' });
     }
@@ -265,10 +264,6 @@ app.get('/admin-orders', authenticate, isAdmin, async (req, res) => {
         console.error('Error fetching admin orders:', err);
         res.status(500).json({ error: 'Error fetching orders' });
     }
-});
-
-app.get('/logout', (req, res) => {
-    res.redirect('/login');
 });
 
 app.post('/login', validateCsrfToken, async (req, res) => {
