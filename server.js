@@ -62,6 +62,7 @@ app.use((req, res, next) => {
         const token = generateCsrfToken();
         res.cookie('csrfToken', token, { httpOnly: true, secure: true, sameSite: 'strict' });
     }
+    res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-eval' https://ierg4210.eastasia.cloudapp.azure.com");
     next();
 });
 
