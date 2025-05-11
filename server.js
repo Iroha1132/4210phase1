@@ -66,12 +66,12 @@ app.use((req, res, next) => {
 });
 
 const validateCsrfToken = (req, res, next) => {
-    const csrfToken = req.cookies.csrfToken;
-    const bodyToken = req.body.csrfToken || req.headers['x-csrf-token'] || req.cookies.csrfToken;
-    if (!csrfToken || !bodyToken || csrfToken !== bodyToken) {
-        return res.status(403).send('CSRF token validation failed');
+    const submittedToken = req.headers['x-csrf-token'] || req.body.csrfToken;
+    if (req.session.csrfTokens && req.session.csrfTokens.includes(submittedToken)) {
+        next();
+    } else {
+        res.status(403).json({ error: 'Invalid CSRF token' });
     }
-    next();
 };
 
 // Authentication Middleware
@@ -136,7 +136,10 @@ app.get('/public/admin.html', (req, res) => {
 
 // API Routes
 app.get('/csrf-token', (req, res) => {
-    res.json({ csrfToken: req.cookies.csrfToken });
+    const csrfToken = require('crypto').randomBytes(32).toString('hex');
+    req.session.csrfTokens = req.session.csrfTokens || [];
+    req.session.csrfTokens.push(csrfToken); // 存储所有 token
+    res.json({ csrfToken });
 });
 
 app.get('/user', async (req, res) => {
