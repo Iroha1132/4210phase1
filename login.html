@@ -32,7 +32,7 @@
 
             // Fetch CSRF token once
             try {
-                const csrfResponse = await fetch('https://ierg4210.eastasia.cloudapp.azure.com/csrf-token', { credentials: 'include' });
+                const csrfResponse = await fetch('/csrf-token', { credentials: 'include' });
                 if (!csrfResponse.ok) throw new Error('Failed to fetch CSRF token');
                 const csrfData = await csrfResponse.json();
                 csrfToken = csrfData.csrfToken;
@@ -60,7 +60,7 @@
                 }
 
                 try {
-                    const loginResponse = await fetch('https://ierg4210.eastasia.cloudapp.azure.com/login', {
+                    const loginResponse = await fetch('/login', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ email, password, csrfToken }),
