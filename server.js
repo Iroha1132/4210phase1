@@ -12,47 +12,74 @@ const sanitizeHtml = require('sanitize-html');
 const http = require('http');
 const fetch = require('node-fetch');
 const dotenv = require('dotenv');
+const winston = require('winston'); // 新增日志框架
+const { Queue } = require('async'); // 新增队列管理
+
 dotenv.config();
 
-const fs = require('fs').promises; // 使用 promises 版本的 fs
+const fs = require('fs').promises;
 
 const app = express();
-const upload = multer({ dest: 'uploads/', limits: { fileSize: 10 * 1024 * 1024 } });
+const upload = multer({ dest: 'uploads/', limits: { fileSize: 2 * 1024 * 1024 } }); // 降低文件大小限制到 2MB
 
-// 数据库连接池配置
+// 配置日志
+const logger = winston.createLogger({
+    level: 'info',
+    format: winston.format.combine(
+        winston.format.timestamp(),
+        winston.format.json()
+    ),
+    transports: [
+        new winston.transports.File({ filename: 'error.log', level: 'error' }),
+        new winston.transports.File({ filename: 'combined.log' })
+    ]
+});
+
+// 生产环境中禁用控制台日志
+if (process.env.NODE_ENV !== 'development') {
+    logger.remove(new winston.transports.Console());
+}
+
+// 数据库连接池配置，降低 connectionLimit
 const db = mysql.createPool({
     host: process.env.DB_HOST || 'ierg421074982.mysql.database.azure.com',
     user: process.env.DB_USER || 'admin123',
     password: process.env.DB_PASSWORD || '@Zhang1325020',
     database: process.env.DB_NAME || 'dummy_shop',
     waitForConnections: true,
-    connectionLimit: 10,
+    connectionLimit: 5, // 降低到 5，适配 Azure 限制
     queueLimit: 0,
     ssl: {
         rejectUnauthorized: true,
-        ca: fs.readFileSync("./DigiCertGlobalRootCA.crt.pem", "utf8"),
+        ca: fs.readFileSync("./DigiCertGlobalRootCA.crt.pem", "utf8")
     }
 });
 
-// 检查数据库连接并定期保活
-db.getConnection((err, connection) => {
-    if (err) {
-        console.error('Database connection failed:', err);
+// 检查数据库连接
+db.getConnection()
+    .then(connection => {
+        logger.info('Database connected successfully');
+        connection.release();
+    })
+    .catch(err => {
+        logger.error('Database connection failed:', err);
         process.exit(1);
-    }
-    console.log('Database connected successfully');
-    connection.release();
-});
+    });
 
-// 定期 ping 数据库，防止空闲连接超时
+// 保活机制：每 5 分钟检查连接池状态
 setInterval(async () => {
     try {
         await db.query('SELECT 1');
-        console.log('Database ping successful');
+        logger.info('Database ping successful');
     } catch (err) {
-        console.error('Database ping failed:', err);
+        logger.error('Database ping failed:', err);
+        // 尝试重建连接池
+        db.end().then(() => {
+            logger.info('Rebuilding connection pool');
+            db.getConnection().catch(err => logger.error('Rebuild failed:', err));
+        });
     }
-}, 300000); // 每 5 分钟 ping 一次
+}, 300000);
 
 // 数据库查询重试逻辑
 async function queryWithRetry(sql, params, retries = 3) {
@@ -60,8 +87,8 @@ async function queryWithRetry(sql, params, retries = 3) {
         try {
             return await db.query(sql, params);
         } catch (err) {
+            logger.error(`Query attempt ${i + 1} failed:`, err);
             if (err.code === 'PROTOCOL_CONNECTION_LOST' && i < retries - 1) {
-                console.warn('Connection lost, retrying...');
                 await new Promise(resolve => setTimeout(resolve, 1000));
                 continue;
             }
@@ -69,6 +96,9 @@ async function queryWithRetry(sql, params, retries = 3) {
         }
     }
 }
+
+// Webhook 队列，限制并发
+const webhookQueue = new Queue({ concurrency: 1 });
 
 // Middleware
 app.use(cors({
@@ -81,23 +111,23 @@ app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 app.use(cookieParser());
 
-// 优化静态文件服务，添加缓存控制
+// 优化静态文件服务
 app.use('/public', express.static(path.join(__dirname, 'public'), {
-    maxAge: '1d', // 缓存 1 天
-    etag: false // 禁用 ETag
+    maxAge: '1d',
+    etag: false
 }));
 app.use(express.static(__dirname, { index: false }));
 
-// 添加请求日志，排查意外请求
+// 请求日志，仅记录错误或关键请求
 app.use((req, res, next) => {
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+    const start = Date.now();
+    res.on('finish', () => {
+        if (res.statusCode >= 400) {
+            logger.error(`${req.method} ${req.path} - ${res.statusCode} - ${Date.now() - start}ms`);
+        }
+    });
     next();
 });
-
-// 监控内存使用
-setInterval(() => {
-    console.log('Memory usage:', process.memoryUsage());
-}, 60000); // 每分钟记录内存使用
 
 // CSRF Protection
 const generateCsrfToken = () => crypto.randomBytes(16).toString('hex');
@@ -113,6 +143,7 @@ const validateCsrfToken = (req, res, next) => {
     const csrfToken = req.cookies.csrfToken;
     const bodyToken = req.body.csrfToken || req.headers['x-csrf-token'] || req.cookies.csrfToken;
     if (!csrfToken || !bodyToken || csrfToken !== bodyToken) {
+        logger.error('CSRF token validation failed');
         return res.status(403).send('CSRF token validation failed');
     }
     next();
@@ -130,13 +161,16 @@ const authenticate = async (req, res, next) => {
         req.user = results[0];
         next();
     } catch (err) {
-        console.error('Auth error:', err);
+        logger.error('Auth error:', err);
         res.status(500).send('Internal Server Error');
     }
 };
 
 const isAdmin = (req, res, next) => {
-    if (!req.user || !req.user.is_admin) return res.status(403).send('Admin access required');
+    if (!req.user || !req.user.is_admin) {
+        logger.error('Admin access required');
+        return res.status(403).send('Admin access required');
+    }
     next();
 };
 
@@ -157,7 +191,7 @@ const validatePrice = (price) => {
 // Escape HTML function
 const escapeHtml = (text) => sanitizeHtml(text, { allowedTags: [], allowedAttributes: {} });
 
-// 添加健康检查端点
+// 健康检查端点，不依赖数据库
 app.get('/health', (req, res) => {
     res.status(200).send('OK');
 });
@@ -198,13 +232,9 @@ app.get('/user', async (req, res) => {
         const [results] = await queryWithRetry('SELECT email, is_admin FROM users WHERE auth_token = ?', [authToken]);
         if (!results.length) return res.json({ email: 'Guest', isAdmin: false });
         
-        res.setHeader('Content-Type', 'application/json');
         res.json({ email: results[0].email, isAdmin: results[0].is_admin });
     } catch (err) {
-       
-
- console.error('User fetch error:', err);
-        res.setHeader('Content-Type', 'application/json');
+        logger.error('User fetch error:', err);
         res.status(500).send('Internal Server Error');
     }
 });
@@ -214,7 +244,7 @@ app.get('/categories', async (req, res) => {
         const [results] = await queryWithRetry('SELECT * FROM categories');
         res.json(results.map(row => ({ catid: row.catid, name: escapeHtml(row.name) })));
     } catch (err) {
-        console.error('Categories error:', err);
+        logger.error('Categories error:', err);
         res.status(500).send('Internal Server Error');
     }
 });
@@ -232,7 +262,7 @@ app.get('/products', async (req, res) => {
             thumbnail: row.thumbnail
         })));
     } catch (err) {
-        console.error('Products error:', err);
+        logger.error('Products error:', err);
         res.status(500).send('Internal Server Error');
     }
 });
@@ -250,7 +280,7 @@ app.get('/products/:catid', async (req, res) => {
             thumbnail: row.thumbnail
         })));
     } catch (err) {
-        console.error('Products by catid error:', err);
+        logger.error('Products by catid error:', err);
         res.status(500).send('Internal Server Error');
     }
 });
@@ -267,7 +297,7 @@ app.get('/product/:pid', async (req, res) => {
             image: product.image || ''
         });
     } catch (err) {
-        console.error('Product error:', err);
+        logger.error('Product error:', err);
         res.status(500).send('Internal Server Error');
     }
 });
@@ -297,7 +327,7 @@ app.get('/orders-data', authenticate, async (req, res) => {
             created_at: order.created_at
         })));
     } catch (err) {
-        console.error('Error fetching orders:', err);
+        logger.error('Error fetching orders:', err);
         res.status(500).json({ error: 'Error fetching orders' });
     }
 });
@@ -314,7 +344,7 @@ app.get('/admin-orders', authenticate, isAdmin, async (req, res) => {
             created_at: order.created_at
         })));
     } catch (err) {
-        console.error('Error fetching admin orders:', err);
+        logger.error('Error fetching admin orders:', err);
         res.status(500).json({ error: 'Error fetching orders' });
     }
 });
@@ -362,13 +392,10 @@ app.post('/login', validateCsrfToken, async (req, res) => {
             email: user.email
         });
     } catch (err) {
-        console.error('Login error:', err.stack);
-        res.status(500).json({ 
-            error: 'Internal server error',
-            details: process.env.NODE_ENV === 'development' ? err.message : null
-        });
+        logger.error('Login error:', err);
+        res.status(500).json({ error: 'Internal server error' });
     } finally {
-        if (connection) connection.release(); // 确保释放连接
+        if (connection) connection.release();
     }
 });
 
@@ -390,7 +417,7 @@ app.post('/logout', validateCsrfToken, authenticate, async (req, res) => {
             csrfToken: newCsrfToken
         });
     } catch (err) {
-        console.error('Logout error:', err);
+        logger.error('Logout error:', err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 });
@@ -412,7 +439,7 @@ app.post('/change-password', validateCsrfToken, authenticate, async (req, res) =
         res.clearCookie('csrfToken');
         res.redirect('/login');
     } catch (err) {
-        console.error('Password change error:', err);
+        logger.error('Password change error:', err);
         res.status(500).send('Internal Server Error');
     }
 });
@@ -420,10 +447,8 @@ app.post('/change-password', validateCsrfToken, authenticate, async (req, res) =
 app.post('/validate-order', validateCsrfToken, authenticate, async (req, res) => {
     let connection;
     try {
-        console.log('Validate-order request body:', req.body);
         const { items } = req.body;
         if (!items || !Array.isArray(items)) {
-            console.log('Invalid items detected');
             return res.status(400).json({ error: 'Invalid items' });
         }
 
@@ -435,16 +460,12 @@ app.post('/validate-order', validateCsrfToken, authenticate, async (req, res) =>
         const salt = crypto.randomBytes(16).toString('hex');
 
         for (const item of items) {
-            console.log('Processing item:', item);
             if (!item.pid || !Number.isInteger(item.quantity) || item.quantity <= 0) {
-                console.log('Invalid item data:', item);
                 throw new Error('Invalid item data');
             }
 
             const [products] = await connection.query('SELECT pid, price FROM products WHERE pid = ?', [item.pid]);
-            console.log('Database query result for pid', item.pid, ':', products);
             if (products.length === 0) {
-                console.log('Product not found:', item.pid);
                 throw new Error(`Product ${item.pid} not found`);
             }
 
@@ -464,113 +485,102 @@ app.post('/validate-order', validateCsrfToken, authenticate, async (req, res) =>
             ...orderItems.map(item => `${item.pid}:${item.quantity}:${item.price}`)
         ].join('|');
         const digest = crypto.createHash('sha256').update(dataToHash).digest('hex');
-        console.log('Digest data:', dataToHash);
-        console.log('Generated digest:', digest);
 
         const userEmail = req.user ? req.user.email : null;
-        console.log('User email:', userEmail);
         const [result] = await connection.query(
             'INSERT INTO orders (user_email, items, total_price, digest, salt, status) VALUES (?, ?, ?, ?, ?, ?)',
             [userEmail, JSON.stringify(orderItems), totalPrice, digest, salt, 'pending']
         );
-        console.log('Order inserted, ID:', result.insertId);
 
-        res.setHeader('Content-Type', 'application/json');
         res.json({ orderID: result.insertId, digest });
     } catch (err) {
-        console.error('Order validation error:', err);
-        res.setHeader('Content-Type', 'application/json');
+        logger.error('Order validation error:', err);
         res.status(400).json({ error: err.message });
     } finally {
-        if (connection) connection.release(); // 确保释放连接
+        if (connection) connection.release();
     }
 });
 
-app.post('/paypal-webhook', async (req, res) => {
-    try {
-        console.log('PayPal webhook received:', req.body);
-        res.setHeader('Content-Type', 'text/plain');
+app.post('/paypal-webhook', (req, res) => {
+    webhookQueue.push(async () => {
+        try {
+            logger.info('Processing PayPal webhook');
+            res.setHeader('Content-Type', 'text/plain');
 
-        // 为 fetch 添加 5 秒超时
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 5000);
-        const verificationUrl = 'https://www.sandbox.paypal.com/cgi-bin/webscr?cmd=_notify-validate';
-        const verificationBody = `cmd=_notify-validate&${new URLSearchParams(req.body).toString()}`;
-        const verificationResponse = await fetch(verificationUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: verificationBody,
-            signal: controller.signal
-        });
-        clearTimeout(timeout);
-        const verificationResult = await verificationResponse.text();
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 5000);
+            const verificationUrl = 'https://www.sandbox.paypal.com/cgi-bin/webscr?cmd=_notify-validate';
+            const verificationBody = `cmd=_notify-validate&${new URLSearchParams(req.body).toString()}`;
+            const verificationResponse = await fetch(verificationUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: verificationBody,
+                signal: controller.signal
+            });
+            clearTimeout(timeout);
+            const verificationResult = await verificationResponse.text();
 
-        if (verificationResult !== 'VERIFIED') {
-            console.error('PayPal verification failed:', verificationResult);
-            return res.status(400).send('Invalid PayPal notification');
+            if (verificationResult !== 'VERIFIED') {
+                logger.error('PayPal verification failed:', verificationResult);
+                return res.status(400).send('Invalid PayPal notification');
+            }
+
+            const paypalTxnId = req.body.txn_id;
+            const [existing] = await queryWithRetry('SELECT transaction_id FROM transactions WHERE paypal_txn_id = ?', [paypalTxnId]);
+            if (existing.length > 0) {
+                logger.warn('Transaction already processed:', paypalTxnId);
+                return res.status(200).send('OK');
+            }
+
+            const orderID = parseInt(req.body.invoice);
+            const [orders] = await queryWithRetry('SELECT * FROM orders WHERE orderID = ?', [orderID]);
+            if (orders.length === 0) {
+                logger.error('Order not found:', orderID);
+                return res.status(400).send('Order not found');
+            }
+
+            const order = orders[0];
+            const orderItems = typeof order.items === 'string' ? JSON.parse(order.items) : order.items;
+
+            const currency = 'USD';
+            const merchantEmail = 'sb-7vfg240731629@business.example.com';
+            const salt = order.salt;
+            const dataToHash = [
+                currency,
+                merchantEmail,
+                salt,
+                ...orderItems.map(item => `${item.pid}:${item.quantity}:${item.price}`)
+            ].join('|');
+            const regeneratedDigest = crypto.createHash('sha256').update(dataToHash).digest('hex');
+
+            if (regeneratedDigest !== order.digest) {
+                logger.error('Digest mismatch:', regeneratedDigest, order.digest);
+                return res.status(400).send('Digest validation failed');
+            }
+
+            await queryWithRetry(
+                'INSERT INTO transactions (orderID, paypal_txn_id, payment_status, payment_amount, currency_code, payer_email, created_at, items) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                [
+                    orderID,
+                    paypalTxnId,
+                    req.body.payment_status,
+                    parseFloat(req.body.mc_gross),
+                    req.body.mc_currency,
+                    req.body.payer_email,
+                    new Date(),
+                    JSON.stringify(orderItems)
+                ]
+            );
+
+            const status = req.body.payment_status === 'Completed' ? 'completed' : 'failed';
+            await queryWithRetry('UPDATE orders SET status = ? WHERE orderID = ?', [status, orderID]);
+
+            res.status(200).send('OK');
+        } catch (err) {
+            logger.error('Webhook error:', err);
+            res.status(500).send('Internal Server Error');
         }
-
-        // Check if transaction already processed
-        const paypalTxnId = req.body.txn_id;
-        const [existing] = await queryWithRetry('SELECT transaction_id FROM transactions WHERE paypal_txn_id = ?', [paypalTxnId]);
-        if (existing.length > 0) {
-            console.warn('Transaction already processed:', paypalTxnId);
-            return res.status(200).send('OK');
-        }
-
-        // Fetch order
-        const orderID = parseInt(req.body.invoice);
-        const [orders] = await queryWithRetry('SELECT * FROM orders WHERE orderID = ?', [orderID]);
-        if (orders.length === 0) {
-            console.error('Order not found:', orderID);
-            return res.status(400).send('Order not found');
-        }
-
-        const order = orders[0];
-        const orderItems = typeof order.items === 'string' ? JSON.parse(order.items) : order.items;
-
-        // Regenerate digest
-        const currency = 'USD';
-        const merchantEmail = 'sb-7vfg240731629@business.example.com';
-        const salt = order.salt;
-        const dataToHash = [
-            currency,
-            merchantEmail,
-            salt,
-            ...orderItems.map(item => `${item.pid}:${item.quantity}:${item.price}`)
-        ].join('|');
-        const regeneratedDigest = crypto.createHash('sha256').update(dataToHash).digest('hex');
-
-        if (regeneratedDigest !== order.digest) {
-            console.error('Digest mismatch:', regeneratedDigest, order.digest);
-            return res.status(400).send('Digest validation failed');
-        }
-
-        // Save transaction with product list
-        await queryWithRetry(
-            'INSERT INTO transactions (orderID, paypal_txn_id, payment_status, payment_amount, currency_code, payer_email, created_at, items) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            [
-                orderID,
-                paypalTxnId,
-                req.body.payment_status,
-                parseFloat(req.body.mc_gross),
-                req.body.mc_currency,
-                req.body.payer_email,
-                new Date(),
-                JSON.stringify(orderItems)
-            ]
-        );
-
-        // Update order status
-        const status = req.body.payment_status === 'Completed' ? 'completed' : 'failed';
-        await queryWithRetry('UPDATE orders SET status = ? WHERE orderID = ?', [status, orderID]);
-
-        res.status(200).send('OK');
-    } catch (err) {
-        console.error('Webhook error:', err);
-        res.setHeader('Content-Type', 'text/plain');
-        res.status(500).send('Internal Server Error');
-    }
+    });
 });
 
 app.post('/add-product', validateCsrfToken, authenticate, isAdmin, upload.single('image'), async (req, res) => {
@@ -581,20 +591,20 @@ app.post('/add-product', validateCsrfToken, authenticate, isAdmin, upload.single
     const descError = validateTextInput(description, 1000, 'Description');
     const priceError = validatePrice(price);
     if (nameError || descError || priceError || !catid) {
-        if (req.file) await fs.unlink(req.file.path).catch(console.error); // 清理临时文件
+        if (req.file) await fs.unlink(req.file.path).catch(err => logger.error('File cleanup error:', err));
         return res.status(400).send(nameError || descError || priceError || 'Category ID is required');
     }
 
     const sanitizedName = sanitizeHtml(name);
     const sanitizedDesc = sanitizeHtml(description);
 
-    if (imagePath) {
-        if (!['image/jpeg', 'image/png', 'image/gif'].includes(req.file.mimetype)) {
-            await fs.unlink(req.file.path).catch(console.error);
-            return res.status(400).send('Invalid image type. Only JPEG, PNG, or GIF allowed.');
-        }
+    try {
+        if (imagePath) {
+            if (!['image/jpeg', 'image/png', 'image/gif'].includes(req.file.mimetype)) {
+                await fs.unlink(req.file.path).catch(err => logger.error('File cleanup error:', err));
+                return res.status(400).send('Invalid image type. Only JPEG, PNG, or GIF allowed.');
+            }
 
-        try {
             await sharp(req.file.path)
                 .resize(200, 200)
                 .toFile(`uploads/thumbnail-${req.file.filename}`);
@@ -603,23 +613,17 @@ app.post('/add-product', validateCsrfToken, authenticate, isAdmin, upload.single
                 'INSERT INTO products (catid, name, price, description, image, thumbnail) VALUES (?, ?, ?, ?, ?, ?)',
                 [catid, sanitizedName, price, sanitizedDesc, imagePath, thumbnailPath]
             );
-            res.send('Product added');
-        } catch (err) {
-            console.error('Add product error:', err);
-            await fs.unlink(req.file.path).catch(console.error);
-            return res.status(500).send('Internal Server Error');
-        }
-    } else {
-        try {
+        } else {
             await queryWithRetry(
                 'INSERT INTO products (catid, name, price, description) VALUES (?, ?, ?, ?)',
                 [catid, sanitizedName, price, sanitizedDesc]
             );
-            res.send('Product added');
-        } catch (err) {
-            console.error('Add product error:', err);
-            return res.status(500).send('Internal Server Error');
         }
+        res.send('Product added');
+    } catch (err) {
+        logger.error('Add product error:', err);
+        if (req.file) await fs.unlink(req.file.path).catch(err => logger.error('File cleanup error:', err));
+        res.status(500).send('Internal Server Error');
     }
 });
 
@@ -632,20 +636,20 @@ app.put('/update-product/:pid', validateCsrfToken, authenticate, isAdmin, upload
     const descError = validateTextInput(description, 1000, 'Description');
     const priceError = validatePrice(price);
     if (nameError || descError || priceError || !catid) {
-        if (req.file) await fs.unlink(req.file.path).catch(console.error);
+        if (req.file) await fs.unlink(req.file.path).catch(err => logger.error('File cleanup error:', err));
         return res.status(400).send(nameError || descError || priceError || 'Category ID is required');
     }
 
     const sanitizedName = sanitizeHtml(name);
     const sanitizedDesc = sanitizeHtml(description);
 
-    if (imagePath) {
-        if (!['image/jpeg', 'image/png', 'image/gif'].includes(req.file.mimetype)) {
-            await fs.unlink(req.file.path).catch(console.error);
-            return res.status(400).send('Invalid image type. Only JPEG, PNG, or GIF allowed.');
-        }
+    try {
+        if (imagePath) {
+            if (!['image/jpeg', 'image/png', 'image/gif'].includes(req.file.mimetype)) {
+                await fs.unlink(req.file.path).catch(err => logger.error('File cleanup error:', err));
+                return res.status(400).send('Invalid image type. Only JPEG, PNG, or GIF allowed.');
+            }
 
-        try {
             await sharp(req.file.path)
                 .resize(200, 200)
                 .toFile(`uploads/thumbnail-${req.file.filename}`);
@@ -654,23 +658,17 @@ app.put('/update-product/:pid', validateCsrfToken, authenticate, isAdmin, upload
                 'UPDATE products SET catid=?, name=?, price=?, description=?, image=?, thumbnail=? WHERE pid=?',
                 [catid, sanitizedName, price, sanitizedDesc, imagePath, thumbnailPath, pid]
             );
-            res.send('Product updated');
-        } catch (err) {
-            console.error('Update product error:', err);
-            await fs.unlink(req.file.path).catch(console.error);
-            return res.status(500).send('Internal Server Error');
-        }
-    } else {
-        try {
+        } else {
             await queryWithRetry(
                 'UPDATE products SET catid=?, name=?, price=?, description=? WHERE pid=?',
                 [catid, sanitizedName, price, sanitizedDesc, pid]
             );
-            res.send('Product updated');
-        } catch (err) {
-            console.error('Update product error:', err);
-            return res.status(500).send('Internal Server Error');
         }
+        res.send('Product updated');
+    } catch (err) {
+        logger.error('Update product error:', err);
+        if (req.file) await fs.unlink(req.file.path).catch(err => logger.error('File cleanup error:', err));
+        res.status(500).send('Internal Server Error');
     }
 });
 
@@ -684,7 +682,7 @@ app.post('/add-category', validateCsrfToken, authenticate, isAdmin, async (req, 
         await queryWithRetry('INSERT INTO categories (name) VALUES (?)', [sanitizedName]);
         res.send('Category added');
     } catch (err) {
-        console.error('Add category error:', err);
+        logger.error('Add category error:', err);
         return res.status(500).send('Internal Server Error');
     }
 });
@@ -701,7 +699,7 @@ app.post('/send-message', validateCsrfToken, authenticate, async (req, res) => {
         await queryWithRetry('INSERT INTO messages (user_email, content) VALUES (?, ?)', [req.user.email, sanitizedContent]);
         res.json({ success: true });
     } catch (err) {
-        console.error('Send message error:', err);
+        logger.error('Send message error:', err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 });
@@ -723,7 +721,7 @@ app.get('/messages', authenticate, async (req, res) => {
             replied_at: msg.replied_at
         })));
     } catch (err) {
-        console.error('Fetch messages error:', err);
+        logger.error('Fetch messages error:', err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 });
@@ -740,7 +738,7 @@ app.get('/admin-messages', authenticate, isAdmin, async (req, res) => {
             replied_at: msg.replied_at
         })));
     } catch (err) {
-        console.error('Fetch admin messages error:', err);
+        logger.error('Fetch admin messages error:', err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 });
@@ -749,7 +747,7 @@ app.post('/reply-message', validateCsrfToken, authenticate, isAdmin, async (req,
     const { message_id, reply } = req.body;
     const replyError = validateTextInput(reply, 1000, 'Reply content');
     if (replyError || !message_id) {
-        console.error('Reply validation error:', { message_id, replyError });
+        logger.error('Reply validation error:', { message_id, replyError });
         return res.status(400).json({ error: replyError || 'Message ID is required' });
     }
 
@@ -760,13 +758,12 @@ app.post('/reply-message', validateCsrfToken, authenticate, isAdmin, async (req,
             [sanitizedReply, message_id]
         );
         if (result.affectedRows === 0) {
-            console.error('Message not found:', message_id);
+            logger.error('Message not found:', message_id);
             return res.status(404).json({ error: 'Message not found' });
         }
-        console.log('Reply sent:', { message_id, reply: sanitizedReply });
         res.json({ success: true });
     } catch (err) {
-        console.error('Reply message error:', err);
+        logger.error('Reply message error:', err);
         res.status(500).json({ error: 'Internal Server Error' });
     }
 });
@@ -782,7 +779,7 @@ app.put('/update-category/:catid', validateCsrfToken, authenticate, isAdmin, asy
         await queryWithRetry('UPDATE categories SET name=? WHERE catid=?', [sanitizedName, catid]);
         res.send('Category updated');
     } catch (err) {
-        console.error('Update category error:', err);
+        logger.error('Update category error:', err);
         return res.status(500).send('Internal Server Error');
     }
 });
@@ -792,7 +789,7 @@ app.delete('/delete-product/:pid', validateCsrfToken, authenticate, isAdmin, asy
         await queryWithRetry('DELETE FROM products WHERE pid = ?', [req.params.pid]);
         res.send('Product deleted');
     } catch (err) {
-        console.error('Delete product error:', err);
+        logger.error('Delete product error:', err);
         return res.status(500).send('Internal Server Error');
     }
 });
@@ -802,17 +799,26 @@ app.delete('/delete-category/:catid', validateCsrfToken, authenticate, isAdmin, 
         await queryWithRetry('DELETE FROM categories WHERE catid = ?', [req.params.catid]);
         res.send('Category deleted');
     } catch (err) {
-        console.error('Delete category error:', err);
+        logger.error('Delete category error:', err);
         return res.status(500).send('Internal Server Error');
     }
 });
 
-// Error handler
+// 全局错误处理
 app.use((err, req, res, next) => {
-    console.error('Server error:', err.stack);
+    logger.error('Server error:', err);
     res.status(500).send('Internal Server Error');
 });
 
+// 捕获未处理异常，防止进程崩溃
+process.on('uncaughtException', (err) => {
+    logger.error('Uncaught Exception:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
 http.createServer(app).listen(3443, '0.0.0.0', () => {
-    console.log('HTTP Server running on port 3443');
+    logger.info('HTTP Server running on port 3443');
 });
